@@ -94,10 +94,18 @@ private fun ControllerScreen(viewModel: ControllerViewModel = viewModel()) {
             valueRange = 0f..100f,
         )
 
+        Text("Repeats ${state.loops}")
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Button(onClick = viewModel::loopsDown) { Text("-") }
+            Button(onClick = { viewModel.setLoops(0) }) { Text("0") }
+            Button(onClick = viewModel::loopsUp) { Text("+") }
+        }
+
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Button(onClick = viewModel::volumeDown) { Text("-") }
             Button(onClick = viewModel::volumeUp) { Text("+") }
             Button(onClick = viewModel::mute) { Text("Mute") }
+            Button(onClick = viewModel::pause) { Text("Pause") }
             Button(onClick = viewModel::stop) { Text("Stop") }
         }
 

@@ -17,6 +17,7 @@ import android.net.NetworkCapabilities
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
+import androidx.media3.common.Player
 import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
 import com.farmguardian.shared.AckPayload
@@ -46,12 +47,22 @@ class NodeService : Service() {
     private var currentSound: String? = null
     private var playbackState = PlaybackState.Stopped
     private var durationSeconds: Int? = null
+    private var remainingLoops = 0
+    private var activeResId: Int? = null
 
     override fun onCreate() {
         super.onCreate()
         createChannel()
         startForeground(NOTIFICATION_ID, notification("Connecting"))
-        player = ExoPlayer.Builder(this).build()
+        player = ExoPlayer.Builder(this).build().also { exoPlayer ->
+            exoPlayer.addListener(
+                object : Player.Listener {
+                    override fun onPlaybackStateChanged(playbackStateValue: Int) {
+                        if (playbackStateValue == Player.STATE_ENDED) onPlaybackEnded()
+                    }
+                },
+            )
+        }
         NodeStatusStore.appendLog(this, "Service", "Started")
         socket = GuardianSocketClient(
             scope = serviceScope,
@@ -83,6 +94,7 @@ class NodeService : Service() {
         serviceScope.launch {
             when (message.type) {
                 MessageType.PLAY -> play(message)
+                MessageType.PAUSE -> pause(message.id)
                 MessageType.STOP -> stop(message.id)
                 else -> Unit
             }
@@ -116,7 +128,10 @@ class NodeService : Service() {
 
         val resolvedPlayer = player ?: return acknowledge(message.id, AckStatus.FAILED, "PlayerUnavailable")
         val safeVolume = (message.volume ?: 80).coerceIn(0, 100)
+        val loops = (message.loops ?: 0).coerceIn(0, 20)
         runCatching {
+            activeResId = resId
+            remainingLoops = loops
             resolvedPlayer.stop()
             resolvedPlayer.clearMediaItems()
             setDeviceVolume(safeVolume)
@@ -129,7 +144,7 @@ class NodeService : Service() {
             currentSound = sound
             durationSeconds = resolvedPlayer.duration.takeIf { it > 0 }?.let { (it / 1000).toInt() }
             lastCommand = "PLAY $sound"
-            NodeStatusStore.appendLog(this, "Played $sound", "Success")
+            NodeStatusStore.appendLog(this, "Played $sound", "Success, repeats $loops")
             acknowledge(message.id, AckStatus.SUCCESS)
             sendStatus(MessageType.STATUS)
         }.onFailure {
@@ -138,14 +153,57 @@ class NodeService : Service() {
         }
     }
 
+    private fun pause(commandId: String) {
+        val resolvedPlayer = player ?: return acknowledge(commandId, AckStatus.FAILED, "PlayerUnavailable")
+        if (resolvedPlayer.isPlaying) {
+            resolvedPlayer.pause()
+            playbackState = PlaybackState.Paused
+            lastCommand = "PAUSE"
+            NodeStatusStore.appendLog(this, "Paused playback", "Success")
+            acknowledge(commandId, AckStatus.SUCCESS)
+            sendStatus(MessageType.STATUS)
+        } else if (playbackState == PlaybackState.Paused) {
+            resolvedPlayer.play()
+            playbackState = PlaybackState.Playing
+            lastCommand = "RESUME"
+            NodeStatusStore.appendLog(this, "Resumed playback", "Success")
+            acknowledge(commandId, AckStatus.SUCCESS)
+            sendStatus(MessageType.STATUS)
+        } else {
+            acknowledge(commandId, AckStatus.FAILED, "NothingPlaying")
+        }
+    }
+
     private fun stop(commandId: String) {
         player?.stop()
         playbackState = PlaybackState.Stopped
         currentSound = null
         durationSeconds = null
+        remainingLoops = 0
+        activeResId = null
         lastCommand = "STOP"
         NodeStatusStore.appendLog(this, "Stopped playback", "Success")
         acknowledge(commandId, AckStatus.SUCCESS)
+        sendStatus(MessageType.STATUS)
+    }
+
+    private fun onPlaybackEnded() {
+        val resId = activeResId
+        val resolvedPlayer = player
+        if (remainingLoops > 0 && resId != null && resolvedPlayer != null) {
+            remainingLoops -= 1
+            resolvedPlayer.seekTo(0)
+            resolvedPlayer.play()
+            NodeStatusStore.appendLog(this, "Repeated ${currentSound ?: "sound"}", "Remaining $remainingLoops")
+            sendStatus(MessageType.STATUS)
+            return
+        }
+
+        playbackState = PlaybackState.Stopped
+        currentSound = null
+        durationSeconds = null
+        activeResId = null
+        lastCommand = "COMPLETED"
         sendStatus(MessageType.STATUS)
     }
 

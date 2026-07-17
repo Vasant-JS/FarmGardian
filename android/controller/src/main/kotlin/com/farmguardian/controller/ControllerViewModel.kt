@@ -37,16 +37,29 @@ class ControllerViewModel : ViewModel() {
 
     fun play(soundId: String) {
         val sound = DefaultSoundOptions.firstOrNull { it.id == soundId }?.label ?: soundId
-        val message = GuardianMessage(type = MessageType.PLAY, sound = soundId, volume = state.value.volume)
-        send(message, "Play requested: $sound")
+        val message = GuardianMessage(
+            type = MessageType.PLAY,
+            sound = soundId,
+            volume = state.value.volume,
+            loops = state.value.loops,
+        )
+        send(message, "Play requested: $sound (${state.value.loops} repeats)")
     }
 
     fun stop() {
         send(GuardianMessage(type = MessageType.STOP), "Stop requested")
     }
 
+    fun pause() {
+        send(GuardianMessage(type = MessageType.PAUSE), "Pause requested")
+    }
+
     fun setVolume(volume: Int) {
         _state.update { it.copy(volume = volume.coerceIn(0, 100)) }
+    }
+
+    fun setLoops(loops: Int) {
+        _state.update { it.copy(loops = loops.coerceIn(0, 20)) }
     }
 
     fun mute() = setVolume(0)
@@ -54,6 +67,10 @@ class ControllerViewModel : ViewModel() {
     fun volumeUp() = setVolume(state.value.volume + 5)
 
     fun volumeDown() = setVolume(state.value.volume - 5)
+
+    fun loopsUp() = setLoops(state.value.loops + 1)
+
+    fun loopsDown() = setLoops(state.value.loops - 1)
 
     override fun onCleared() {
         socket.stop()
@@ -130,5 +147,6 @@ data class ControllerState(
     val temperatureLabel: String = "Unknown",
     val lastSeenLabel: String = "Never",
     val volume: Int = 80,
+    val loops: Int = 0,
     val activity: List<String> = emptyList(),
 )

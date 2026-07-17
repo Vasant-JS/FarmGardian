@@ -11,6 +11,7 @@ data class GuardianMessage(
     val hello: HelloPayload? = null,
     val sound: String? = null,
     val volume: Int? = null,
+    val loops: Int? = null,
     val status: NodeStatusPayload? = null,
     val ack: AckPayload? = null,
     val reason: String? = null,
@@ -61,6 +62,7 @@ enum class MessageType {
     PONG,
     PLAY,
     STOP,
+    PAUSE,
     STATUS,
     HEARTBEAT,
     ACK,
@@ -75,6 +77,7 @@ enum class AckStatus {
 @Serializable
 enum class PlaybackState {
     Playing,
+    Paused,
     Stopped,
 }
 
@@ -85,13 +88,14 @@ data class SoundOption(
 )
 
 val DefaultSoundOptions = listOf(
-    SoundOption("dog_01", "Dog Bark", "Dogs"),
-    SoundOption("dog_02", "Dog Bark 2", "Dogs"),
-    SoundOption("dog_03", "Dog Bark 3", "Dogs"),
-    SoundOption("human_01", "Human Shout", "Humans"),
-    SoundOption("human_02", "Human Shout 2", "Humans"),
-    SoundOption("tiger", "Tiger", "Animals"),
-    SoundOption("alarm", "Siren", "Sirens"),
+    SoundOption("dog_barking_1", "Dog Barking 1", "Dogs"),
+    SoundOption("dog_barking_2", "Dog Barking 2", "Dogs"),
+    SoundOption("monkey_screem", "Monkey Scream", "Monkeys"),
+    SoundOption("scaring_monkey_sound", "Scaring Monkey", "Monkeys"),
+    SoundOption("scaring_monkey_sound_2", "Scaring Monkey 2", "Monkeys"),
+    SoundOption("loud_buzzer", "Loud Buzzer", "Sirens"),
+    SoundOption("loud_mixed_alarm", "Mixed Alarm", "Sirens"),
+    SoundOption("gun_shot", "Gun Shot", "Custom"),
 )
 
 object GuardianConfig {
