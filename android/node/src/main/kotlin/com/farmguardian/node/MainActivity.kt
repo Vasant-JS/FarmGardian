@@ -81,7 +81,7 @@ private fun NodeScreen(onStartService: () -> Unit) {
         Text("Node ID: Farm-01")
         Text("Connected: ${snapshot.connection}")
         Text("Bluetooth Connected: ${snapshot.bluetooth}")
-        Text("Speaker: ${snapshot.speaker}")
+        Text("Audio Output: ${snapshot.speaker}")
         Text("Foreground Service Running")
         Text("Last Command: ${snapshot.lastCommand}")
         Text("Last Playback: ${snapshot.currentSound}")

@@ -42,7 +42,6 @@ class NodeService : Service() {
     private lateinit var socket: GuardianSocketClient
     private var player: ExoPlayer? = null
     private var healthJob: Job? = null
-    private var bluetoothRetryJob: Job? = null
     private var lastCommand = "none"
     private var currentSound: String? = null
     private var playbackState = PlaybackState.Stopped
@@ -64,7 +63,6 @@ class NodeService : Service() {
         )
         socket.start()
         startHealthReporting()
-        startBluetoothRetryLoop()
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -74,7 +72,6 @@ class NodeService : Service() {
     override fun onDestroy() {
         NodeStatusStore.appendLog(this, "Service", "Stopped")
         healthJob?.cancel()
-        bluetoothRetryJob?.cancel()
         socket.stop()
         player?.release()
         player = null
@@ -83,10 +80,12 @@ class NodeService : Service() {
     }
 
     private fun handleMessage(message: GuardianMessage) {
-        when (message.type) {
-            MessageType.PLAY -> play(message)
-            MessageType.STOP -> stop(message.id)
-            else -> Unit
+        serviceScope.launch {
+            when (message.type) {
+                MessageType.PLAY -> play(message)
+                MessageType.STOP -> stop(message.id)
+                else -> Unit
+            }
         }
     }
 
@@ -170,20 +169,6 @@ class NodeService : Service() {
         }
     }
 
-    private fun startBluetoothRetryLoop() {
-        bluetoothRetryJob?.cancel()
-        bluetoothRetryJob = serviceScope.launch {
-            while (true) {
-                delay(GuardianConfig.BLUETOOTH_RETRY_INTERVAL_MS)
-                val bluetooth = bluetoothInfo()
-                if (!bluetooth.connected) {
-                    NodeStatusStore.appendLog(this@NodeService, "Bluetooth retry", "Waiting for speaker")
-                    sendStatus(MessageType.STATUS)
-                }
-            }
-        }
-    }
-
     private fun sendStatus(type: MessageType) {
         val status = buildStatus()
         NodeStatusStore.saveSnapshot(this, status, lastCommand)
@@ -192,14 +177,14 @@ class NodeService : Service() {
 
     private fun buildStatus(): NodeStatusPayload {
         val battery = batteryInfo()
-        val bluetooth = bluetoothInfo()
+        val audioOutput = audioOutputInfo()
         return NodeStatusPayload(
             online = true,
             batteryPercent = battery.percent,
             charging = battery.charging,
             network = networkLabel(),
-            bluetoothConnected = bluetooth.connected,
-            speakerName = bluetooth.name,
+            bluetoothConnected = audioOutput.bluetoothConnected,
+            speakerName = audioOutput.label,
             appVersion = "0.1.0",
             playbackState = playbackState,
             currentSound = currentSound,
@@ -232,19 +217,30 @@ class NodeService : Service() {
         )
     }
 
-    private fun bluetoothInfo(): BluetoothInfo {
+    private fun audioOutputInfo(): AudioOutputInfo {
+        val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        if (audioManager.isBluetoothA2dpOn || audioManager.isBluetoothScoOn) {
+            return AudioOutputInfo(true, bluetoothDeviceName() ?: "Bluetooth audio")
+        }
+        if (audioManager.isWiredHeadsetOn) {
+            return AudioOutputInfo(false, "Wired/AUX audio")
+        }
+        return AudioOutputInfo(false, "Phone speaker")
+    }
+
+    private fun bluetoothDeviceName(): String? {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
-            return BluetoothInfo(false, "Permission needed")
+            return null
         }
 
         val manager = getSystemService(BluetoothManager::class.java)
-        val adapter = manager.adapter ?: return BluetoothInfo(false, null)
+        val adapter = manager.adapter ?: return null
         val connected = runCatching {
             adapter.getProfileConnectionState(android.bluetooth.BluetoothProfile.A2DP) == BluetoothAdapter.STATE_CONNECTED ||
                 adapter.getProfileConnectionState(android.bluetooth.BluetoothProfile.HEADSET) == BluetoothAdapter.STATE_CONNECTED
         }.getOrDefault(false)
-        val name = runCatching { adapter.bondedDevices.firstOrNull()?.name }.getOrNull()
-        return BluetoothInfo(connected, name)
+        if (!connected) return null
+        return runCatching { adapter.bondedDevices.firstOrNull()?.name }.getOrNull()
     }
 
     private fun networkLabel(): String {
@@ -286,9 +282,9 @@ class NodeService : Service() {
         val temperatureCelsius: Float?,
     )
 
-    private data class BluetoothInfo(
-        val connected: Boolean,
-        val name: String?,
+    private data class AudioOutputInfo(
+        val bluetoothConnected: Boolean,
+        val label: String,
     )
 
     companion object {

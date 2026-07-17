@@ -22,7 +22,7 @@ object NodeStatusStore {
             .putBoolean("charging", status.charging == true)
             .putString("network", status.network ?: "Unknown")
             .putBoolean("bluetooth", status.bluetoothConnected == true)
-            .putString("speaker", status.speakerName ?: "Unknown")
+            .putString("speaker", status.speakerName ?: "Phone speaker")
             .putString("playback", status.playbackState.name)
             .putString("currentSound", status.currentSound ?: "None")
             .putString("lastCommand", lastCommand)
