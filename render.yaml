@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: farm-guardian-backend
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    envVars:
+      - key: FARM_GUARDIAN_SECRET
+        sync: false
