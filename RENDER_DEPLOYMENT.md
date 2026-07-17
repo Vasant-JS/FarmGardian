@@ -30,7 +30,7 @@ Render sets `PORT` automatically for web services. The backend reads that variab
 
 ## 3. Get the WebSocket URL
 
-After deploy, Render gives a URL like:
+After deploy, Render gives this URL:
 
 ```text
 https://farm-guardian-backend.onrender.com

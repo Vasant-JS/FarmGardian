@@ -51,6 +51,12 @@ Render-ready files are included:
 
 Follow [RENDER_DEPLOYMENT.md](RENDER_DEPLOYMENT.md) to create the Render service and rebuild Android apps with the final `wss://.../ws` URL.
 
+Current Render backend:
+
+```text
+wss://farm-guardian-backend.onrender.com/ws
+```
+
 ## V1 Coverage
 
 - Controller connects over WebSocket, auto-reconnects, sends `PLAY` and `STOP`, controls volume percentage, and displays node health, playback, ACKs, and recent activity.
