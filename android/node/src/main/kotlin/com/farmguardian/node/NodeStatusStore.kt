@@ -37,6 +37,10 @@ object NodeStatusStore {
         prefs.edit().putString("logs", logs.takeLast(MAX_LOGS).joinToString("\n")).apply()
     }
 
+    fun clearLogs(context: Context) {
+        prefs(context).edit().remove("logs").apply()
+    }
+
     fun readSnapshot(context: Context): NodeUiSnapshot {
         val prefs = prefs(context)
         return NodeUiSnapshot(

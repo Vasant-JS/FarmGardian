@@ -92,6 +92,14 @@ private fun NodeScreen(onStartService: () -> Unit) {
         Button(onClick = onStartService) {
             Text("Start Service")
         }
+        Button(
+            onClick = {
+                NodeStatusStore.clearLogs(context)
+                snapshot = NodeStatusStore.readSnapshot(context)
+            },
+        ) {
+            Text("Clear Logs")
+        }
         Text("Logs", style = MaterialTheme.typography.titleMedium)
         snapshot.logs.takeLast(20).forEach {
             Text(it)
