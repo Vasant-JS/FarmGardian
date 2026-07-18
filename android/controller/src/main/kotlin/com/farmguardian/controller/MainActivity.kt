@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -33,27 +34,35 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Agriculture
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.BatteryChargingFull
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.Cameraswitch
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Eco
 import androidx.compose.material.icons.filled.Emergency
 import androidx.compose.material.icons.filled.FlashlightOn
+import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Hub
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LinkOff
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Logout
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.NotificationImportant
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.PauseCircle
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Pets
 import androidx.compose.material.icons.filled.PlayCircle
+import androidx.compose.material.icons.filled.PriorityHigh
 import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.Router
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Screenshot
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material.icons.filled.Settings
@@ -61,11 +70,13 @@ import androidx.compose.material.icons.filled.SignalCellular4Bar
 import androidx.compose.material.icons.filled.Speaker
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.ZoomIn
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -210,6 +221,27 @@ private fun ControllerScreen(viewModel: ControllerViewModel = viewModel()) {
                     LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), color = gold)
                 }
 
+                CameraPanel(
+                    state = state,
+                    nodes = state.nodes,
+                    selectedNodeId = state.selectedNodeId,
+                    primary = primary,
+                    gold = gold,
+                    outline = outline,
+                    muted = muted,
+                    onSelectNode = viewModel::selectNode,
+                    onStart = { viewModel.applyCameraConfig(true) },
+                    onStop = { viewModel.applyCameraConfig(false) },
+                    onLens = viewModel::setCameraLens,
+                    onTorch = { viewModel.setCameraTorch(!state.cameraTorch) },
+                    onFpsDown = { viewModel.setCameraFps(state.cameraFps - 1) },
+                    onFpsUp = { viewModel.setCameraFps(state.cameraFps + 1) },
+                    onQualityDown = { viewModel.setCameraQuality(state.cameraQuality - 10) },
+                    onQualityUp = { viewModel.setCameraQuality(state.cameraQuality + 10) },
+                    onResolution = viewModel::setCameraResolution,
+                    onPlay = viewModel::play,
+                )
+
                 SectionTitle(icon = Icons.Default.VolumeUp, title = "Quick Commands", color = primary)
                 DefaultSoundOptions.chunked(2).forEach { row ->
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
@@ -240,22 +272,6 @@ private fun ControllerScreen(viewModel: ControllerViewModel = viewModel()) {
                     onPause = viewModel::pause,
                     onLoopsDown = viewModel::loopsDown,
                     onLoopsUp = viewModel::loopsUp,
-                )
-
-                CameraPanel(
-                    state = state,
-                    primary = primary,
-                    outline = outline,
-                    muted = muted,
-                    onStart = { viewModel.applyCameraConfig(true) },
-                    onStop = { viewModel.applyCameraConfig(false) },
-                    onLens = viewModel::setCameraLens,
-                    onTorch = { viewModel.setCameraTorch(!state.cameraTorch) },
-                    onFpsDown = { viewModel.setCameraFps(state.cameraFps - 1) },
-                    onFpsUp = { viewModel.setCameraFps(state.cameraFps + 1) },
-                    onQualityDown = { viewModel.setCameraQuality(state.cameraQuality - 10) },
-                    onQualityUp = { viewModel.setCameraQuality(state.cameraQuality + 10) },
-                    onResolution = viewModel::setCameraResolution,
                 )
 
                 DashboardCard(outline = outline) {
@@ -474,13 +490,18 @@ private fun MiniMetric(icon: ImageVector, label: String, color: Color) {
 }
 
 @Composable
-private fun LabelChip(label: String, color: Color, background: Color = Color(0xFFEDEEEF)) {
+private fun LabelChip(
+    label: String,
+    color: Color,
+    background: Color = Color(0xFFEDEEEF),
+    modifier: Modifier = Modifier,
+) {
     Text(
         text = label,
         color = color,
         fontSize = 11.sp,
         fontWeight = FontWeight.SemiBold,
-        modifier = Modifier
+        modifier = modifier
             .background(background, RoundedCornerShape(999.dp))
             .padding(horizontal = 10.dp, vertical = 5.dp),
     )
@@ -657,9 +678,13 @@ private fun Stepper(value: String, onMinus: () -> Unit, onPlus: () -> Unit) {
 @Composable
 private fun CameraPanel(
     state: ControllerState,
+    nodes: List<NodeSummary>,
+    selectedNodeId: String?,
     primary: Color,
+    gold: Color,
     outline: Color,
     muted: Color,
+    onSelectNode: (String) -> Unit,
     onStart: () -> Unit,
     onStop: () -> Unit,
     onLens: (CameraLensFacing) -> Unit,
@@ -669,9 +694,180 @@ private fun CameraPanel(
     onQualityDown: () -> Unit,
     onQualityUp: () -> Unit,
     onResolution: (Int, Int) -> Unit,
+    onPlay: (String) -> Unit,
 ) {
-    DashboardCard(outline = outline) {
-        SectionTitle(icon = Icons.Default.Videocam, title = "Live Camera", color = primary)
+    val selectedNode = nodes.firstOrNull { it.nodeId == selectedNodeId }
+
+    Column(verticalArrangement = Arrangement.spacedBy(22.dp)) {
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onStop) {
+                Icon(Icons.Default.ArrowBack, contentDescription = "Stop camera", tint = Color.Black)
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Live Camera - ${selectedNode?.friendlyName ?: "Main Farm"}",
+                    color = primary,
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                    Box(modifier = Modifier.size(9.dp).background(primary, CircleShape))
+                    Text("${selectedNodeId ?: "Node-01"} - ${state.nodeStatusLabel}", color = muted, fontSize = 14.sp)
+                }
+            }
+            IconButton(onClick = { onResolution(1280, 720) }) {
+                Icon(Icons.Default.Tune, contentDescription = "High quality stream", tint = Color.Black)
+            }
+            Image(
+                painter = painterResource(id = R.drawable.farm_guardian_logo),
+                contentDescription = "Farm Guardian",
+                modifier = Modifier.size(44.dp),
+            )
+        }
+
+        CameraStreamCard(
+            state = state,
+            nodeId = selectedNodeId ?: "Node-01",
+            primary = primary,
+            onStart = onStart,
+            onStop = onStop,
+            onTorch = onTorch,
+            onLens = onLens,
+        )
+
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("Switch Camera", color = primary, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+            Spacer(modifier = Modifier.weight(1f))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("View All Nodes", color = Color(0xFF7D5800), fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                Icon(Icons.Default.ChevronRight, contentDescription = null, tint = Color(0xFF7D5800), modifier = Modifier.size(20.dp))
+            }
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            nodes.ifEmpty {
+                listOf(NodeSummary(nodeId = "Farm-01", friendlyName = "Main Farm Gate", online = false))
+            }.forEach { node ->
+                CameraThumb(
+                    node = node,
+                    selected = node.nodeId == selectedNodeId,
+                    primary = primary,
+                    outline = outline,
+                    onClick = { onSelectNode(node.nodeId) },
+                )
+            }
+        }
+
+        SectionTitle(icon = Icons.Default.Campaign, title = "Instant Deterrents", color = primary)
+        Row(horizontalArrangement = Arrangement.spacedBy(22.dp), modifier = Modifier.fillMaxWidth()) {
+            DeterrentTile(
+                label = "Dog Barking",
+                icon = Icons.Default.Pets,
+                background = gold,
+                iconBackground = Color(0xFF7D5800),
+                textColor = Color(0xFF5E4100),
+                onClick = { onPlay("dog_barking_1") },
+                modifier = Modifier.weight(1f),
+            )
+            DeterrentTile(
+                label = "Monkey Scream",
+                icon = Icons.Default.Eco,
+                background = gold,
+                iconBackground = Color(0xFF7D5800),
+                textColor = Color(0xFF5E4100),
+                onClick = { onPlay("monkey_screem") },
+                modifier = Modifier.weight(1f),
+            )
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(22.dp), modifier = Modifier.fillMaxWidth()) {
+            DeterrentTile(
+                label = "Loud Buzzer",
+                icon = Icons.Default.NotificationImportant,
+                background = gold,
+                iconBackground = Color(0xFF7D5800),
+                textColor = Color(0xFF5E4100),
+                onClick = { onPlay("loud_buzzer") },
+                modifier = Modifier.weight(1f),
+            )
+            DeterrentTile(
+                label = "Gun Shot",
+                icon = Icons.Default.PriorityHigh,
+                background = Color(0xFFFFDAD6),
+                iconBackground = Color(0xFF7E0009),
+                textColor = Color(0xFF93000A),
+                onClick = { onPlay("gun_shot") },
+                modifier = Modifier.weight(1f),
+            )
+        }
+
+        CameraStatsCard(
+            icon = Icons.Default.Router,
+            label = "Signal Strength",
+            value = "${state.networkLabel} - ${if (state.backendStatus == "Connected") "Excellent" else "Reconnecting"}",
+            iconTint = primary,
+            iconBg = Color(0xFFE1E8E4),
+            outline = outline,
+        )
+        CameraStatsCard(
+            icon = Icons.Default.BatteryChargingFull,
+            label = "Node Battery",
+            value = "${state.batteryLabel} - ${state.chargingLabel}",
+            iconTint = Color(0xFF7D5800),
+            iconBg = Color(0xFFFFF5D6),
+            outline = outline,
+        )
+
+        DashboardCard(outline = outline) {
+            SectionTitle(icon = Icons.Default.Settings, title = "Stream Controls", color = primary)
+            Text("Last frame: ${state.cameraLastFrameLabel}", color = muted, fontSize = 12.sp)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                Button(onClick = onStart, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = primary)) { Text("Start") }
+                OutlinedButton(onClick = onStop, modifier = Modifier.weight(1f)) { Text("Stop") }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                ControlChip("Back", state.cameraLensFacing == CameraLensFacing.BACK, primary) { onLens(CameraLensFacing.BACK) }
+                ControlChip("Front", state.cameraLensFacing == CameraLensFacing.FRONT, primary) { onLens(CameraLensFacing.FRONT) }
+                ControlChip("Torch", state.cameraTorch, primary, icon = Icons.Default.FlashlightOn, onClick = onTorch)
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text("FPS ${state.cameraFps}", color = muted, modifier = Modifier.weight(1f))
+                SmallOutlineButton(Icons.Default.Remove, onFpsDown)
+                SmallOutlineButton(Icons.Default.Add, onFpsUp)
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text("Quality ${state.cameraQuality}", color = muted, modifier = Modifier.weight(1f))
+                SmallOutlineButton(Icons.Default.Remove, onQualityDown)
+                SmallOutlineButton(Icons.Default.Add, onQualityUp)
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                ControlChip("Low", state.cameraWidth == 320, primary, icon = Icons.Default.Cameraswitch) { onResolution(320, 240) }
+                ControlChip("Med", state.cameraWidth == 640, primary) { onResolution(640, 480) }
+                ControlChip("High", state.cameraWidth == 1280, primary) { onResolution(1280, 720) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CameraStreamCard(
+    state: ControllerState,
+    nodeId: String,
+    primary: Color,
+    onStart: () -> Unit,
+    onStop: () -> Unit,
+    onTorch: () -> Unit,
+    onLens: (CameraLensFacing) -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .aspectRatio(16f / 9f)
+            .background(Color.Black, RoundedCornerShape(12.dp)),
+    ) {
         val frame = state.cameraFrame
         if (frame != null) {
             Image(
@@ -679,43 +875,197 @@ private fun CameraPanel(
                 contentDescription = "Live camera frame",
                 modifier = Modifier
                     .fillMaxWidth()
-                    .aspectRatio(4f / 3f),
+                    .aspectRatio(16f / 9f),
             )
         } else {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(Icons.Default.Videocam, contentDescription = null, tint = Color.White.copy(alpha = 0.65f), modifier = Modifier.size(42.dp))
+                    Text("Waiting for live stream", color = Color.White, fontWeight = FontWeight.SemiBold)
+                    Text("Tap Start to request camera from $nodeId", color = Color.White.copy(alpha = 0.72f), fontSize = 12.sp)
+                }
+            }
+        }
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.18f)),
+        )
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(14.dp),
+            verticalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Row(verticalAlignment = Alignment.Top) {
+                LabelChip("LIVE", Color.White, background = Color(0xFFBA1A1A))
+                Spacer(modifier = Modifier.width(8.dp))
+                LabelChip(nodeId, Color.White, background = Color.Black.copy(alpha = 0.48f))
+                Spacer(modifier = Modifier.weight(1f))
+                Column(horizontalAlignment = Alignment.End) {
+                    Text("Last: ${state.cameraLastFrameLabel}", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    Text("FPS: ${state.cameraFps} | Q${state.cameraQuality}", color = Color.White.copy(alpha = 0.82f), fontSize = 12.sp)
+                }
+            }
+            Row(verticalAlignment = Alignment.Bottom) {
+                Row(
+                    modifier = Modifier
+                        .background(Color.Black.copy(alpha = 0.42f), RoundedCornerShape(12.dp))
+                        .padding(6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    CameraOverlayButton(Icons.Default.ZoomIn, "Zoom", onStart)
+                    CameraOverlayButton(Icons.Default.Fullscreen, "Fullscreen", onStart)
+                }
+                Spacer(modifier = Modifier.weight(1f))
+                Row(
+                    modifier = Modifier
+                        .background(Color.Black.copy(alpha = 0.42f), RoundedCornerShape(12.dp))
+                        .padding(6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    CameraOverlayButton(Icons.Default.Screenshot, "Snapshot", onStart)
+                    CameraOverlayButton(Icons.Default.Videocam, "Start or stop", if (state.cameraEnabled) onStop else onStart)
+                    CameraOverlayButton(Icons.Default.Mic, "Torch", onTorch, active = state.cameraTorch, primary = primary)
+                    CameraOverlayButton(Icons.Default.Cameraswitch, "Switch lens", onClick = {
+                        onLens(if (state.cameraLensFacing == CameraLensFacing.BACK) CameraLensFacing.FRONT else CameraLensFacing.BACK)
+                    })
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CameraOverlayButton(
+    icon: ImageVector,
+    contentDescription: String,
+    onClick: () -> Unit,
+    active: Boolean = false,
+    primary: Color = Color(0xFF012D1D),
+) {
+    IconButton(
+        onClick = onClick,
+        modifier = Modifier
+            .size(46.dp)
+            .background(if (active) primary else Color.White.copy(alpha = 0.18f), RoundedCornerShape(8.dp)),
+    ) {
+        Icon(icon, contentDescription = contentDescription, tint = Color.White, modifier = Modifier.size(26.dp))
+    }
+}
+
+@Composable
+private fun CameraThumb(
+    node: NodeSummary,
+    selected: Boolean,
+    primary: Color,
+    outline: Color,
+    onClick: () -> Unit,
+) {
+    Button(
+        onClick = onClick,
+        modifier = Modifier
+            .width(168.dp)
+            .height(112.dp),
+        shape = RoundedCornerShape(12.dp),
+        colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black),
+        border = BorderStroke(1.dp, if (selected) primary else outline),
+        contentPadding = PaddingValues(0.dp),
+    ) {
+        Column(modifier = Modifier.fillMaxSize()) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .aspectRatio(4f / 3f)
-                    .background(Color(0xFF202124), RoundedCornerShape(8.dp)),
+                    .weight(1f)
+                    .background(if (selected) primary.copy(alpha = 0.16f) else Color(0xFFE1E3E4)),
+            ) {
+                Icon(Icons.Default.Videocam, contentDescription = null, tint = if (selected) primary else Color(0xFF717973), modifier = Modifier.align(Alignment.Center).size(30.dp))
+                LabelChip(
+                    label = node.nodeId,
+                    color = Color.White,
+                    background = if (selected) primary else Color(0xFF414844),
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(6.dp),
+                )
+            }
+            Text(
+                text = node.friendlyName,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 8.dp),
+                color = if (selected) primary else Color.Black,
+                fontSize = 13.sp,
+                textAlign = TextAlign.Center,
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+            )
+        }
+    }
+}
+
+@Composable
+private fun DeterrentTile(
+    label: String,
+    icon: ImageVector,
+    background: Color,
+    iconBackground: Color,
+    textColor: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Button(
+        onClick = onClick,
+        modifier = modifier.height(142.dp),
+        shape = RoundedCornerShape(18.dp),
+        colors = ButtonDefaults.buttonColors(containerColor = background, contentColor = textColor),
+        contentPadding = PaddingValues(8.dp),
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+            Box(
+                modifier = Modifier
+                    .size(54.dp)
+                    .background(iconBackground, CircleShape),
                 contentAlignment = Alignment.Center,
             ) {
-                Text("No camera frame", color = Color.White)
+                Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(30.dp))
             }
+            Text(label, modifier = Modifier.padding(top = 16.dp), fontSize = 18.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center)
         }
-        Text("Last frame: ${state.cameraLastFrameLabel}", color = muted, fontSize = 12.sp)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-            Button(onClick = onStart, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = primary)) { Text("Start") }
-            OutlinedButton(onClick = onStop, modifier = Modifier.weight(1f)) { Text("Stop") }
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-            ControlChip("Back", state.cameraLensFacing == CameraLensFacing.BACK, primary) { onLens(CameraLensFacing.BACK) }
-            ControlChip("Front", state.cameraLensFacing == CameraLensFacing.FRONT, primary) { onLens(CameraLensFacing.FRONT) }
-            ControlChip("Torch", state.cameraTorch, primary, icon = Icons.Default.FlashlightOn, onClick = onTorch)
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("FPS ${state.cameraFps}", color = muted, modifier = Modifier.weight(1f))
-            SmallOutlineButton(Icons.Default.Remove, onFpsDown)
-            SmallOutlineButton(Icons.Default.Add, onFpsUp)
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("Quality ${state.cameraQuality}", color = muted, modifier = Modifier.weight(1f))
-            SmallOutlineButton(Icons.Default.Remove, onQualityDown)
-            SmallOutlineButton(Icons.Default.Add, onQualityUp)
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-            ControlChip("Low", state.cameraWidth == 320, primary, icon = Icons.Default.Cameraswitch) { onResolution(320, 240) }
-            ControlChip("Med", state.cameraWidth == 640, primary) { onResolution(640, 480) }
-            ControlChip("High", state.cameraWidth == 1280, primary) { onResolution(1280, 720) }
+    }
+}
+
+@Composable
+private fun CameraStatsCard(
+    icon: ImageVector,
+    label: String,
+    value: String,
+    iconTint: Color,
+    iconBg: Color,
+    outline: Color,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = Color(0xFFEDEEEF),
+        shape = RoundedCornerShape(12.dp),
+        border = BorderStroke(1.dp, outline),
+    ) {
+        Row(
+            modifier = Modifier.padding(24.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(18.dp),
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(66.dp)
+                    .background(iconBg, RoundedCornerShape(10.dp)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(30.dp))
+            }
+            Column {
+                Text(label, color = Color(0xFF414844), fontSize = 15.sp)
+                Text(value, color = Color.Black, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+            }
         }
     }
 }
