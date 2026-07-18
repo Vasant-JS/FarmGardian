@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -36,6 +37,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.farmguardian.shared.CameraLensFacing
@@ -75,6 +77,11 @@ private fun ControllerScreen(viewModel: ControllerViewModel = viewModel()) {
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Text("Farm Guardian", style = MaterialTheme.typography.headlineMedium)
+        Image(
+            painter = painterResource(id = R.drawable.farm_guardian_logo),
+            contentDescription = "Farm Guardian logo",
+            modifier = Modifier.size(120.dp),
+        )
 
         if (!state.loggedIn) {
             TextField(
