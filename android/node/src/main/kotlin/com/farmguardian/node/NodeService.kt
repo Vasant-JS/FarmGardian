@@ -1,25 +1,38 @@
 package com.farmguardian.node
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
-import android.app.Service
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.graphics.ImageFormat
+import android.graphics.Rect
+import android.graphics.YuvImage
 import android.media.AudioManager
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
-import android.os.IBinder
+import android.util.Base64
+import android.util.Size
+import androidx.camera.core.Camera
+import androidx.camera.core.CameraSelector
+import androidx.camera.core.ImageAnalysis
+import androidx.camera.core.ImageProxy
+import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
-import androidx.media3.common.Player
+import androidx.lifecycle.LifecycleService
 import androidx.media3.common.MediaItem
+import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import com.farmguardian.shared.CameraConfigPayload
+import com.farmguardian.shared.CameraLensFacing
+import com.farmguardian.shared.CameraFramePayload
 import com.farmguardian.shared.AckPayload
 import com.farmguardian.shared.AckStatus
 import com.farmguardian.shared.ConnectionState
@@ -37,11 +50,21 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.io.ByteArrayOutputStream
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
 
-class NodeService : Service() {
+class NodeService : LifecycleService() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private lateinit var socket: GuardianSocketClient
     private var player: ExoPlayer? = null
+    private var cameraProvider: ProcessCameraProvider? = null
+    private var camera: Camera? = null
+    private var cameraExecutor: ExecutorService? = null
+    private var cameraActive = false
+    private var cameraQuality = 60
+    private var cameraFrameIntervalMs = 500L
+    @Volatile private var lastCameraFrameAt = 0L
     private var healthJob: Job? = null
     private var autoPlayJob: Job? = null
     private var lastCommand = "none"
@@ -90,14 +113,14 @@ class NodeService : Service() {
         startHealthReporting()
     }
 
-    override fun onBind(intent: Intent?): IBinder? = null
-
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
 
     override fun onDestroy() {
         NodeStatusStore.appendLog(this, "Service", "Stopped")
         healthJob?.cancel()
         autoPlayJob?.cancel()
+        stopCameraStream()
+        cameraExecutor?.shutdown()
         socket.stop()
         player?.release()
         player = null
@@ -112,6 +135,7 @@ class NodeService : Service() {
                 MessageType.PAUSE -> pause(message.id)
                 MessageType.STOP -> stop(message.id)
                 MessageType.AUTO_PLAY_CONFIG -> configureAutoPlay(message)
+                MessageType.CAMERA_CONFIG -> configureCamera(message)
                 MessageType.DISCONNECT_NODE -> disconnectFromController()
                 else -> Unit
             }
@@ -326,8 +350,135 @@ class NodeService : Service() {
             durationSeconds = durationSeconds,
             remainingSeconds = remainingSeconds(),
             phoneTemperatureCelsius = battery.temperatureCelsius,
+            cameraActive = cameraActive,
             lastSeen = System.currentTimeMillis(),
         )
+    }
+
+    private fun configureCamera(message: GuardianMessage) {
+        val config = message.camera
+        if (config == null) {
+            acknowledge(message.id, AckStatus.FAILED, "MissingCameraConfig")
+            return
+        }
+
+        if (!config.enabled) {
+            stopCameraStream()
+            NodeStatusStore.appendLog(this, "Camera", "Stopped")
+            acknowledge(message.id, AckStatus.SUCCESS)
+            sendStatus(MessageType.STATUS)
+            return
+        }
+
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+            acknowledge(message.id, AckStatus.FAILED, "CameraPermissionNeeded")
+            NodeStatusStore.appendLog(this, "Camera", "Permission needed")
+            return
+        }
+
+        startCameraStream(config)
+        acknowledge(message.id, AckStatus.SUCCESS)
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun startCameraStream(config: CameraConfigPayload) {
+        stopCameraStream()
+        cameraQuality = config.quality.coerceIn(20, 95)
+        cameraFrameIntervalMs = 1000L / config.fps.coerceIn(1, 10)
+        cameraExecutor = Executors.newSingleThreadExecutor()
+
+        val providerFuture = ProcessCameraProvider.getInstance(this)
+        providerFuture.addListener(
+            {
+                val provider = providerFuture.get()
+                cameraProvider = provider
+                val selector = CameraSelector.Builder()
+                    .requireLensFacing(
+                        if (config.lensFacing == CameraLensFacing.FRONT) {
+                            CameraSelector.LENS_FACING_FRONT
+                        } else {
+                            CameraSelector.LENS_FACING_BACK
+                        },
+                    )
+                    .build()
+                val analysis = ImageAnalysis.Builder()
+                    .setTargetResolution(Size(config.width, config.height))
+                    .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                    .build()
+                analysis.setAnalyzer(cameraExecutor ?: Executors.newSingleThreadExecutor()) { image ->
+                    handleCameraImage(image)
+                }
+
+                provider.unbindAll()
+                camera = provider.bindToLifecycle(this, selector, analysis)
+                camera?.cameraControl?.enableTorch(config.torch)
+                cameraActive = true
+                NodeStatusStore.appendLog(this, "Camera", "Started ${config.width}x${config.height} ${config.fps}fps")
+                sendStatus(MessageType.STATUS)
+            },
+            ContextCompat.getMainExecutor(this),
+        )
+    }
+
+    private fun stopCameraStream() {
+        cameraProvider?.unbindAll()
+        cameraProvider = null
+        camera = null
+        cameraActive = false
+        cameraExecutor?.shutdown()
+        cameraExecutor = null
+    }
+
+    private fun handleCameraImage(image: ImageProxy) {
+        try {
+            val now = System.currentTimeMillis()
+            if (now - lastCameraFrameAt < cameraFrameIntervalMs) return
+            lastCameraFrameAt = now
+            val jpeg = image.toJpeg(cameraQuality)
+            val base64 = Base64.encodeToString(jpeg, Base64.NO_WRAP)
+            socket.send(
+                GuardianMessage(
+                    type = MessageType.CAMERA_FRAME,
+                    frame = CameraFramePayload(
+                        dataBase64 = base64,
+                        width = image.width,
+                        height = image.height,
+                        timestamp = now,
+                    ),
+                ),
+            )
+        } finally {
+            image.close()
+        }
+    }
+
+    private fun ImageProxy.toJpeg(quality: Int): ByteArray {
+        val nv21 = toNv21()
+        val yuvImage = YuvImage(nv21, ImageFormat.NV21, width, height, null)
+        val output = ByteArrayOutputStream()
+        yuvImage.compressToJpeg(Rect(0, 0, width, height), quality, output)
+        return output.toByteArray()
+    }
+
+    private fun ImageProxy.toNv21(): ByteArray {
+        val yPlane = planes[0]
+        val uPlane = planes[1]
+        val vPlane = planes[2]
+        val yBuffer = yPlane.buffer
+        val uBuffer = uPlane.buffer
+        val vBuffer = vPlane.buffer
+        val nv21 = ByteArray(width * height * 3 / 2)
+        yBuffer.get(nv21, 0, width * height)
+        val chromaHeight = height / 2
+        val chromaWidth = width / 2
+        var offset = width * height
+        for (row in 0 until chromaHeight) {
+            for (col in 0 until chromaWidth) {
+                nv21[offset++] = vBuffer.get(row * vPlane.rowStride + col * vPlane.pixelStride)
+                nv21[offset++] = uBuffer.get(row * uPlane.rowStride + col * uPlane.pixelStride)
+            }
+        }
+        return nv21
     }
 
     private fun remainingSeconds(): Int? {

@@ -49,6 +49,7 @@ class MainActivity : ComponentActivity() {
 
     private fun requestRuntimePermissions() {
         val permissions = buildList {
+            add(Manifest.permission.CAMERA)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 add(Manifest.permission.POST_NOTIFICATIONS)
             }

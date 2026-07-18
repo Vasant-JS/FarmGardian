@@ -241,6 +241,8 @@ data class GuardianMessage(
     val targetNodeId: String? = null,
     val nodeId: String? = null,
     val friendlyName: String? = null,
+    val camera: CameraConfigPayload? = null,
+    val frame: CameraFramePayload? = null,
     val sound: String? = null,
     val volume: Int? = null,
     val loops: Int? = null,
@@ -282,7 +284,27 @@ data class NodeStatusPayload(
     val durationSeconds: Int? = null,
     val remainingSeconds: Int? = null,
     val phoneTemperatureCelsius: Float? = null,
+    val cameraActive: Boolean = false,
     val lastSeen: Long = System.currentTimeMillis(),
+)
+
+@Serializable
+data class CameraConfigPayload(
+    val enabled: Boolean,
+    val lensFacing: String = "BACK",
+    val fps: Int = 2,
+    val quality: Int = 60,
+    val width: Int = 640,
+    val height: Int = 480,
+    val torch: Boolean = false,
+)
+
+@Serializable
+data class CameraFramePayload(
+    val dataBase64: String,
+    val width: Int,
+    val height: Int,
+    val timestamp: Long = System.currentTimeMillis(),
 )
 
 @Serializable

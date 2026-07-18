@@ -1,8 +1,13 @@
 package com.farmguardian.controller
 
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.util.Base64
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.farmguardian.shared.AckStatus
+import com.farmguardian.shared.CameraConfigPayload
+import com.farmguardian.shared.CameraLensFacing
 import com.farmguardian.shared.ConnectionState
 import com.farmguardian.shared.DefaultSoundOptions
 import com.farmguardian.shared.DeviceRole
@@ -92,6 +97,52 @@ class ControllerViewModel : ViewModel() {
         )
     }
 
+    fun setCameraEnabled(enabled: Boolean) {
+        _state.update { it.copy(cameraEnabled = enabled) }
+    }
+
+    fun setCameraLens(lensFacing: CameraLensFacing) {
+        _state.update { it.copy(cameraLensFacing = lensFacing) }
+    }
+
+    fun setCameraFps(fps: Int) {
+        _state.update { it.copy(cameraFps = fps.coerceIn(1, 10)) }
+    }
+
+    fun setCameraQuality(quality: Int) {
+        _state.update { it.copy(cameraQuality = quality.coerceIn(20, 95)) }
+    }
+
+    fun setCameraResolution(width: Int, height: Int) {
+        _state.update { it.copy(cameraWidth = width, cameraHeight = height) }
+    }
+
+    fun setCameraTorch(torch: Boolean) {
+        _state.update { it.copy(cameraTorch = torch) }
+    }
+
+    fun applyCameraConfig(enabled: Boolean = state.value.cameraEnabled) {
+        val targetNodeId = selectedNodeIdOrLog() ?: return
+        _state.update { it.copy(cameraEnabled = enabled) }
+        val config = state.value.copy(cameraEnabled = enabled)
+        send(
+            GuardianMessage(
+                type = MessageType.CAMERA_CONFIG,
+                targetNodeId = targetNodeId,
+                camera = CameraConfigPayload(
+                    enabled = enabled,
+                    lensFacing = config.cameraLensFacing,
+                    fps = config.cameraFps,
+                    quality = config.cameraQuality,
+                    width = config.cameraWidth,
+                    height = config.cameraHeight,
+                    torch = config.cameraTorch,
+                ),
+            ),
+            if (enabled) "Camera stream requested" else "Camera stream stopped",
+        )
+    }
+
     fun setVolume(volume: Int) {
         _state.update { it.copy(volume = volume.coerceIn(0, 100)) }
     }
@@ -157,6 +208,14 @@ class ControllerViewModel : ViewModel() {
             applyNodeList(message.nodes)
         }
 
+        val frame = message.frame
+        if (message.type == MessageType.CAMERA_FRAME &&
+            frame != null &&
+            (message.nodeId == null || message.nodeId == state.value.selectedNodeId)
+        ) {
+            applyCameraFrame(frame.dataBase64)
+        }
+
         val status = message.status
         if (status != null && (message.nodeId == null || message.nodeId == state.value.selectedNodeId)) {
             applyStatus(status)
@@ -217,6 +276,17 @@ class ControllerViewModel : ViewModel() {
         _state.update { it.copy(activity = (it.activity + "${timeFormat.format(Date())}  $line").takeLast(20)) }
     }
 
+    private fun applyCameraFrame(dataBase64: String) {
+        val bytes = runCatching { Base64.decode(dataBase64, Base64.NO_WRAP) }.getOrNull() ?: return
+        val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return
+        _state.update {
+            it.copy(
+                cameraFrame = bitmap,
+                cameraLastFrameLabel = timeFormat.format(Date()),
+            )
+        }
+    }
+
     private fun selectedNodeIdOrLog(): String? {
         val nodeId = state.value.selectedNodeId
         if (nodeId == null) log("Select an online node first")
@@ -244,6 +314,15 @@ data class ControllerState(
     val lastSeenLabel: String = "Never",
     val nodes: List<NodeSummary> = emptyList(),
     val selectedNodeId: String? = null,
+    val cameraEnabled: Boolean = false,
+    val cameraLensFacing: CameraLensFacing = CameraLensFacing.BACK,
+    val cameraFps: Int = 2,
+    val cameraQuality: Int = 60,
+    val cameraWidth: Int = 640,
+    val cameraHeight: Int = 480,
+    val cameraTorch: Boolean = false,
+    val cameraFrame: Bitmap? = null,
+    val cameraLastFrameLabel: String = "Never",
     val volume: Int = 80,
     val loops: Int = 0,
     val defaultSoundId: String = DefaultSoundOptions.first().id,

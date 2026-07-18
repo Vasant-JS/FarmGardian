@@ -9,11 +9,14 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -31,8 +34,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.farmguardian.shared.CameraLensFacing
 import com.farmguardian.shared.DefaultSoundOptions
 
 class MainActivity : ComponentActivity() {
@@ -123,6 +129,62 @@ private fun ControllerScreen(viewModel: ControllerViewModel = viewModel()) {
         Text("Remaining: ${state.remainingSeconds?.let { "$it sec" } ?: "Unknown"}")
         Text("Temperature: ${state.temperatureLabel}")
         Text("Last Seen: ${state.lastSeenLabel}")
+
+        Text("Live Camera", style = MaterialTheme.typography.titleMedium)
+        val frame = state.cameraFrame
+        if (frame != null) {
+            Image(
+                bitmap = frame.asImageBitmap(),
+                contentDescription = "Live camera frame",
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(4f / 3f),
+            )
+        } else {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(4f / 3f)
+                    .background(Color(0xFF202124))
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.Center,
+            ) {
+                Text("No camera frame", color = Color.White)
+            }
+        }
+        Text("Last frame: ${state.cameraLastFrameLabel}")
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = { viewModel.applyCameraConfig(true) }) { Text("Start Camera") }
+            Button(onClick = { viewModel.applyCameraConfig(false) }) { Text("Stop Camera") }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = { viewModel.setCameraLens(CameraLensFacing.BACK) }) {
+                Text(if (state.cameraLensFacing == CameraLensFacing.BACK) "* Back" else "Back")
+            }
+            Button(onClick = { viewModel.setCameraLens(CameraLensFacing.FRONT) }) {
+                Text(if (state.cameraLensFacing == CameraLensFacing.FRONT) "* Front" else "Front")
+            }
+            Button(onClick = { viewModel.setCameraTorch(!state.cameraTorch) }) {
+                Text(if (state.cameraTorch) "Torch On" else "Torch Off")
+            }
+        }
+        Text("Camera FPS ${state.cameraFps}")
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = { viewModel.setCameraFps(state.cameraFps - 1) }) { Text("-") }
+            Button(onClick = { viewModel.setCameraFps(2) }) { Text("2") }
+            Button(onClick = { viewModel.setCameraFps(state.cameraFps + 1) }) { Text("+") }
+        }
+        Text("Camera Quality ${state.cameraQuality}")
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = { viewModel.setCameraQuality(state.cameraQuality - 10) }) { Text("-") }
+            Button(onClick = { viewModel.setCameraQuality(60) }) { Text("60") }
+            Button(onClick = { viewModel.setCameraQuality(state.cameraQuality + 10) }) { Text("+") }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = { viewModel.setCameraResolution(320, 240) }) { Text("Low") }
+            Button(onClick = { viewModel.setCameraResolution(640, 480) }) { Text("Med") }
+            Button(onClick = { viewModel.setCameraResolution(1280, 720) }) { Text("High") }
+        }
 
         if (state.connecting) {
             LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
