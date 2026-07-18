@@ -4,25 +4,68 @@ import android.Manifest
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccessTime
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Agriculture
+import androidx.compose.material.icons.filled.ArrowForward
+import androidx.compose.material.icons.filled.BatteryChargingFull
+import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.Campaign
+import androidx.compose.material.icons.filled.Cameraswitch
+import androidx.compose.material.icons.filled.Emergency
+import androidx.compose.material.icons.filled.FlashlightOn
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Hub
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.LinkOff
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Logout
+import androidx.compose.material.icons.filled.NotificationImportant
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.PauseCircle
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Pets
+import androidx.compose.material.icons.filled.PlayCircle
+import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.Sensors
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.SignalCellular4Bar
+import androidx.compose.material.icons.filled.Speaker
+import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -30,12 +73,6 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowForward
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -44,6 +81,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -54,6 +92,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -64,6 +103,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.farmguardian.shared.CameraLensFacing
 import com.farmguardian.shared.DefaultSoundOptions
+import com.farmguardian.shared.NodeSummary
 
 class MainActivity : ComponentActivity() {
     private val permissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) {}
@@ -88,6 +128,22 @@ private fun ControllerScreen(viewModel: ControllerViewModel = viewModel()) {
     val state by viewModel.state.collectAsState()
     var defaultSoundMenuOpen by remember { mutableStateOf(false) }
     val selectedDefaultSound = DefaultSoundOptions.firstOrNull { it.id == state.defaultSoundId } ?: DefaultSoundOptions.first()
+    val selectedNode = state.nodes.firstOrNull { it.nodeId == state.selectedNodeId }
+    val primary = Color(0xFF012D1D)
+    val primaryPanel = Color(0xFF174E36)
+    val gold = Color(0xFFFFB702)
+    val page = Color(0xFFF8F9FA)
+    val outline = Color(0xFFC1C8C2)
+    val muted = Color(0xFF414844)
+    val onlineCount = state.nodes.count { it.online }
+    val durationSeconds = state.durationSeconds
+    val remainingSeconds = state.remainingSeconds
+    val playbackProgress = when {
+        durationSeconds != null && remainingSeconds != null && durationSeconds > 0 ->
+            ((durationSeconds - remainingSeconds).toFloat() / durationSeconds).coerceIn(0f, 1f)
+        state.playbackLabel == "Playing" -> 0.45f
+        else -> 0f
+    }
 
     if (!state.loggedIn) {
         LoginScreen(
@@ -98,48 +154,524 @@ private fun ControllerScreen(viewModel: ControllerViewModel = viewModel()) {
         return
     }
 
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+            .background(page),
     ) {
-        Text("Farm Guardian", style = MaterialTheme.typography.headlineMedium)
+        Column(modifier = Modifier.fillMaxSize()) {
+            TopAppBar(
+                backendStatus = state.backendStatus,
+                primary = primary,
+                gold = gold,
+                onLogout = viewModel::logout,
+            )
 
-        Text("Backend: ${state.backendStatus}")
-        Button(onClick = viewModel::logout) { Text("Logout") }
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 14.dp, vertical = 18.dp),
+                verticalArrangement = Arrangement.spacedBy(20.dp),
+            ) {
+                SectionHeader("Connected Nodes", "$onlineCount Node${if (onlineCount == 1) "" else "s"} Active", primary, muted)
 
-        Text("Connected Nodes", style = MaterialTheme.typography.titleMedium)
-        if (state.nodes.isEmpty()) {
-            Text("No nodes connected")
-        }
-        state.nodes.forEach { node ->
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(
-                    modifier = Modifier.weight(1f),
-                    onClick = { viewModel.selectNode(node.nodeId) },
-                ) {
-                    Text("${if (node.nodeId == state.selectedNodeId) "* " else ""}${node.friendlyName} - ${if (node.online) "Online" else "Offline"}")
+                if (state.nodes.isEmpty()) {
+                    DashboardCard(outline = outline) {
+                        Text("No nodes connected", color = muted, fontWeight = FontWeight.SemiBold)
+                        Text("Login with the same account on a Node phone to pair it here.", color = muted, fontSize = 13.sp)
+                    }
+                } else {
+                    selectedNode?.let { node ->
+                        NodeStatusCard(
+                            state = state,
+                            nodeName = node.friendlyName,
+                            nodeId = node.nodeId,
+                            online = node.online,
+                            progress = playbackProgress,
+                            primary = primary,
+                            gold = gold,
+                            outline = outline,
+                            muted = muted,
+                        )
+                    }
+                    NodeSelector(
+                        nodes = state.nodes,
+                        selectedNodeId = state.selectedNodeId,
+                        primary = primary,
+                        outline = outline,
+                        onSelect = viewModel::selectNode,
+                        onDisconnect = viewModel::disconnectNode,
+                    )
                 }
-                Button(onClick = { viewModel.disconnectNode(node.nodeId) }) {
-                    Text("Disconnect")
+
+                if (state.connecting) {
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), color = gold)
                 }
+
+                SectionTitle(icon = Icons.Default.VolumeUp, title = "Quick Commands", color = primary)
+                DefaultSoundOptions.chunked(2).forEach { row ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                        row.forEach { sound ->
+                            SoundCommandButton(
+                                label = sound.label,
+                                icon = soundIcon(sound.id),
+                                active = sound.id == state.currentSound,
+                                primary = primary,
+                                gold = gold,
+                                onClick = { viewModel.play(sound.id) },
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                    }
+                }
+
+                PlaybackDeck(
+                    volume = state.volume,
+                    loops = state.loops,
+                    playbackLabel = state.playbackLabel,
+                    primaryPanel = primaryPanel,
+                    gold = gold,
+                    onVolume = viewModel::setVolume,
+                    onVolumeDown = viewModel::volumeDown,
+                    onVolumeUp = viewModel::volumeUp,
+                    onStop = viewModel::stop,
+                    onPause = viewModel::pause,
+                    onLoopsDown = viewModel::loopsDown,
+                    onLoopsUp = viewModel::loopsUp,
+                )
+
+                CameraPanel(
+                    state = state,
+                    primary = primary,
+                    outline = outline,
+                    muted = muted,
+                    onStart = { viewModel.applyCameraConfig(true) },
+                    onStop = { viewModel.applyCameraConfig(false) },
+                    onLens = viewModel::setCameraLens,
+                    onTorch = { viewModel.setCameraTorch(!state.cameraTorch) },
+                    onFpsDown = { viewModel.setCameraFps(state.cameraFps - 1) },
+                    onFpsUp = { viewModel.setCameraFps(state.cameraFps + 1) },
+                    onQualityDown = { viewModel.setCameraQuality(state.cameraQuality - 10) },
+                    onQualityUp = { viewModel.setCameraQuality(state.cameraQuality + 10) },
+                    onResolution = viewModel::setCameraResolution,
+                )
+
+                DashboardCard(outline = outline) {
+                    SectionTitle(icon = Icons.Default.Schedule, title = "Timed Autoplay", color = primary)
+                    Text("Default Sound", color = muted, fontSize = 12.sp)
+                    Box {
+                        OutlinedButton(
+                            onClick = { defaultSoundMenuOpen = true },
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(selectedDefaultSound.label, modifier = Modifier.weight(1f), textAlign = TextAlign.Start)
+                        }
+                        DropdownMenu(
+                            expanded = defaultSoundMenuOpen,
+                            onDismissRequest = { defaultSoundMenuOpen = false },
+                        ) {
+                            DefaultSoundOptions.forEach { sound ->
+                                DropdownMenuItem(
+                                    text = { Text(sound.label) },
+                                    onClick = {
+                                        viewModel.setDefaultSound(sound.id)
+                                        defaultSoundMenuOpen = false
+                                    },
+                                )
+                            }
+                        }
+                    }
+                    Text("Interval (min)", color = muted, fontSize = 12.sp)
+                    Stepper(
+                        value = state.autoIntervalMinutes.toString(),
+                        onMinus = viewModel::autoIntervalDown,
+                        onPlus = viewModel::autoIntervalUp,
+                    )
+                    Button(
+                        onClick = viewModel::applyAutoPlayConfig,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = primary, contentColor = Color.White),
+                        shape = RoundedCornerShape(8.dp),
+                    ) {
+                        Icon(Icons.Default.Timer, contentDescription = null)
+                        Text("Apply Timer", modifier = Modifier.padding(start = 8.dp), fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                ActivityLog(activity = state.activity.takeLast(6), primary = primary, gold = gold, outline = outline, muted = muted)
+
+                Spacer(modifier = Modifier.height(74.dp))
             }
         }
 
-        Text("Node: ${state.nodeStatusLabel}")
-        Text("Battery: ${state.batteryLabel} - ${state.chargingLabel}")
-        Text("Network: ${state.networkLabel}")
-        Text("Bluetooth: ${state.bluetoothLabel}")
-        Text("Speaker: ${state.speakerName ?: "Unknown"}")
-        Text("Playback: ${state.playbackLabel}")
-        Text("Current Sound: ${state.currentSound ?: "None"}")
-        Text("Remaining: ${state.remainingSeconds?.let { "$it sec" } ?: "Unknown"}")
-        Text("Temperature: ${state.temperatureLabel}")
-        Text("Last Seen: ${state.lastSeenLabel}")
+        EmergencyButton(
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = 24.dp, bottom = 84.dp),
+            onClick = { viewModel.play("loud_buzzer") },
+        )
 
-        Text("Live Camera", style = MaterialTheme.typography.titleMedium)
+        BottomNavigationBar(modifier = Modifier.align(Alignment.BottomCenter), primary = primary, gold = gold)
+    }
+}
+
+@Composable
+private fun TopAppBar(backendStatus: String, primary: Color, gold: Color, onLogout: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(50.dp)
+            .background(Color.White)
+            .padding(horizontal = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Icons.Default.Agriculture, contentDescription = null, tint = primary, modifier = Modifier.size(27.dp))
+        Text(
+            text = "Farm Guardian",
+            color = primary,
+            fontWeight = FontWeight.Bold,
+            fontSize = 15.sp,
+            modifier = Modifier.padding(start = 10.dp),
+        )
+        Spacer(modifier = Modifier.weight(1f))
+        StatusPill(
+            label = if (backendStatus == "Connected") "CONNECTED" else backendStatus.uppercase(),
+            color = if (backendStatus == "Connected") Color(0xFF0E8A45) else gold,
+        )
+        IconButton(onClick = onLogout) {
+            Icon(Icons.Default.Logout, contentDescription = "Logout", tint = Color(0xFF414844))
+        }
+    }
+}
+
+@Composable
+private fun SectionHeader(title: String, meta: String, primary: Color, muted: Color) {
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(title, color = primary, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+        Spacer(modifier = Modifier.weight(1f))
+        Text(meta, color = muted, fontSize = 12.sp)
+    }
+}
+
+@Composable
+private fun SectionTitle(icon: ImageVector, title: String, color: Color) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(21.dp))
+        Text(title, color = color, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+@Composable
+private fun DashboardCard(outline: Color, content: @Composable ColumnScope.() -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        border = BorderStroke(1.dp, outline),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+    ) {
+        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp), content = content)
+    }
+}
+
+@Composable
+private fun StatusPill(label: String, color: Color) {
+    Row(
+        modifier = Modifier
+            .background(color.copy(alpha = 0.13f), RoundedCornerShape(999.dp))
+            .padding(horizontal = 10.dp, vertical = 5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Box(modifier = Modifier.size(7.dp).background(color, CircleShape))
+        Text(label, color = color, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+    }
+}
+
+@Composable
+private fun NodeStatusCard(
+    state: ControllerState,
+    nodeName: String,
+    nodeId: String,
+    online: Boolean,
+    progress: Float,
+    primary: Color,
+    gold: Color,
+    outline: Color,
+    muted: Color,
+) {
+    DashboardCard(outline = outline) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .background(primary, RoundedCornerShape(8.dp)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(Icons.Default.Speaker, contentDescription = null, tint = Color.White)
+            }
+            Column(
+                modifier = Modifier
+                    .padding(start = 12.dp)
+                    .weight(1f),
+            ) {
+                Text(nodeName, color = primary, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                Text("($nodeId)", color = muted, fontSize = 13.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(top = 4.dp)) {
+                    MiniMetric(Icons.Default.Sensors, if (online) "Online" else "Offline", if (online) Color(0xFF087F3E) else Color(0xFFBA1A1A))
+                    MiniMetric(Icons.Default.BatteryChargingFull, state.batteryLabel, muted)
+                    MiniMetric(Icons.Default.SignalCellular4Bar, state.networkLabel, muted)
+                }
+            }
+            Icon(Icons.Default.Hub, contentDescription = null, tint = outline.copy(alpha = 0.7f), modifier = Modifier.size(54.dp))
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            LabelChip(state.speakerName ?: "Phone Speaker", muted)
+            LabelChip("ACTIVE CONTROL", primary, background = gold)
+        }
+        Surface(
+            color = primary.copy(alpha = 0.05f),
+            shape = RoundedCornerShape(8.dp),
+            border = BorderStroke(1.dp, primary.copy(alpha = 0.12f)),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                    Icon(Icons.Default.History, contentDescription = null, tint = gold, modifier = Modifier.size(17.dp))
+                    Text("Current Status", color = primary, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                }
+                Text("Playing: ${state.currentSound ?: state.playbackLabel}", color = muted, fontSize = 13.sp)
+                Text("Remaining: ${state.remainingSeconds?.let { formatSeconds(it) } ?: "--:--"}", color = muted, fontSize = 13.sp)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(4.dp)
+                        .background(outline, RoundedCornerShape(999.dp)),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(progress)
+                            .fillMaxHeight()
+                            .background(gold, RoundedCornerShape(999.dp)),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MiniMetric(icon: ImageVector, label: String, color: Color) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+        Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(14.dp))
+        Text(label, color = color, fontSize = 11.sp)
+    }
+}
+
+@Composable
+private fun LabelChip(label: String, color: Color, background: Color = Color(0xFFEDEEEF)) {
+    Text(
+        text = label,
+        color = color,
+        fontSize = 11.sp,
+        fontWeight = FontWeight.SemiBold,
+        modifier = Modifier
+            .background(background, RoundedCornerShape(999.dp))
+            .padding(horizontal = 10.dp, vertical = 5.dp),
+    )
+}
+
+@Composable
+private fun NodeSelector(
+    nodes: List<NodeSummary>,
+    selectedNodeId: String?,
+    primary: Color,
+    outline: Color,
+    onSelect: (String) -> Unit,
+    onDisconnect: (String) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        nodes.forEach { node ->
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(
+                    onClick = { onSelect(node.nodeId) },
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(8.dp),
+                    border = BorderStroke(1.dp, if (node.nodeId == selectedNodeId) primary else outline),
+                ) {
+                    Text(
+                        text = "${node.friendlyName} - ${if (node.online) "Online" else "Offline"}",
+                        color = if (node.nodeId == selectedNodeId) primary else Color(0xFF414844),
+                        fontSize = 12.sp,
+                    )
+                }
+                TextButton(onClick = { onDisconnect(node.nodeId) }) {
+                    Text("Disconnect", color = Color(0xFFBA1A1A), fontSize = 12.sp)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SoundCommandButton(
+    label: String,
+    icon: ImageVector,
+    active: Boolean,
+    primary: Color,
+    gold: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Button(
+        onClick = onClick,
+        modifier = modifier.height(86.dp),
+        shape = RoundedCornerShape(8.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = if (active) gold else Color(0xFFE1E3E4),
+            contentColor = if (active) primary else Color.Black,
+        ),
+        border = BorderStroke(1.dp, if (active) primary else Color(0xFFC1C8C2)),
+        elevation = ButtonDefaults.buttonElevation(defaultElevation = if (active) 4.dp else 1.dp),
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+            Icon(icon, contentDescription = null, modifier = Modifier.size(26.dp))
+            Text(label, fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 8.dp))
+        }
+    }
+}
+
+@Composable
+private fun PlaybackDeck(
+    volume: Int,
+    loops: Int,
+    playbackLabel: String,
+    primaryPanel: Color,
+    gold: Color,
+    onVolume: (Int) -> Unit,
+    onVolumeDown: () -> Unit,
+    onVolumeUp: () -> Unit,
+    onStop: () -> Unit,
+    onPause: () -> Unit,
+    onLoopsDown: () -> Unit,
+    onLoopsUp: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = primaryPanel,
+        shape = RoundedCornerShape(12.dp),
+        shadowElevation = 5.dp,
+    ) {
+        Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("OUTPUT VOLUME", color = Color.White.copy(alpha = 0.65f), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.weight(1f))
+                Text("$volume%", color = Color.White.copy(alpha = 0.8f), fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                RoundIconButton(Icons.Default.Remove, onVolumeDown)
+                Slider(
+                    value = volume.toFloat(),
+                    onValueChange = { onVolume(it.toInt()) },
+                    valueRange = 0f..100f,
+                    modifier = Modifier.weight(1f),
+                )
+                RoundIconButton(Icons.Default.Add, onVolumeUp)
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                RoundIconButton(Icons.Default.Stop, onStop, filled = true)
+                Spacer(modifier = Modifier.weight(1f))
+                Button(
+                    onClick = onPause,
+                    shape = CircleShape,
+                    modifier = Modifier.size(72.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = gold, contentColor = Color(0xFF4B3600)),
+                    contentPadding = PaddingValues(0.dp),
+                ) {
+                    Icon(if (playbackLabel == "Paused") Icons.Default.PlayCircle else Icons.Default.PauseCircle, contentDescription = "Play or pause", modifier = Modifier.size(44.dp))
+                }
+                Spacer(modifier = Modifier.weight(1f))
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("REPEATS", color = Color.White.copy(alpha = 0.55f), fontSize = 10.sp)
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                        SmallSquareButton(Icons.Default.Remove, onLoopsDown)
+                        Text("$loops", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                        SmallSquareButton(Icons.Default.Add, onLoopsUp)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RoundIconButton(icon: ImageVector, onClick: () -> Unit, filled: Boolean = false) {
+    IconButton(
+        onClick = onClick,
+        modifier = Modifier
+            .size(46.dp)
+            .background(Color.White.copy(alpha = if (filled) 0.12f else 0.04f), CircleShape),
+    ) {
+        Icon(icon, contentDescription = null, tint = Color.White.copy(alpha = 0.8f))
+    }
+}
+
+@Composable
+private fun SmallSquareButton(icon: ImageVector, onClick: () -> Unit) {
+    IconButton(
+        onClick = onClick,
+        modifier = Modifier
+            .size(32.dp)
+            .background(Color.White.copy(alpha = 0.10f), RoundedCornerShape(6.dp)),
+    ) {
+        Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+    }
+}
+
+@Composable
+private fun Stepper(value: String, onMinus: () -> Unit, onPlus: () -> Unit) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        OutlinedButton(onClick = onMinus, modifier = Modifier.size(48.dp), shape = RoundedCornerShape(8.dp), contentPadding = PaddingValues(0.dp)) {
+            Icon(Icons.Default.Remove, contentDescription = "Decrease", modifier = Modifier.size(16.dp))
+        }
+        Box(
+            modifier = Modifier
+                .height(48.dp)
+                .weight(1f)
+                .background(Color(0xFFEDEEEF), RoundedCornerShape(8.dp)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(value, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        }
+        OutlinedButton(onClick = onPlus, modifier = Modifier.size(48.dp), shape = RoundedCornerShape(8.dp), contentPadding = PaddingValues(0.dp)) {
+            Icon(Icons.Default.Add, contentDescription = "Increase", modifier = Modifier.size(16.dp))
+        }
+    }
+}
+
+@Composable
+private fun CameraPanel(
+    state: ControllerState,
+    primary: Color,
+    outline: Color,
+    muted: Color,
+    onStart: () -> Unit,
+    onStop: () -> Unit,
+    onLens: (CameraLensFacing) -> Unit,
+    onTorch: () -> Unit,
+    onFpsDown: () -> Unit,
+    onFpsUp: () -> Unit,
+    onQualityDown: () -> Unit,
+    onQualityUp: () -> Unit,
+    onResolution: (Int, Int) -> Unit,
+) {
+    DashboardCard(outline = outline) {
+        SectionTitle(icon = Icons.Default.Videocam, title = "Live Camera", color = primary)
         val frame = state.cameraFrame
         if (frame != null) {
             Image(
@@ -150,122 +682,175 @@ private fun ControllerScreen(viewModel: ControllerViewModel = viewModel()) {
                     .aspectRatio(4f / 3f),
             )
         } else {
-            Column(
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .aspectRatio(4f / 3f)
-                    .background(Color(0xFF202124))
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.Center,
+                    .background(Color(0xFF202124), RoundedCornerShape(8.dp)),
+                contentAlignment = Alignment.Center,
             ) {
                 Text("No camera frame", color = Color.White)
             }
         }
-        Text("Last frame: ${state.cameraLastFrameLabel}")
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = { viewModel.applyCameraConfig(true) }) { Text("Start Camera") }
-            Button(onClick = { viewModel.applyCameraConfig(false) }) { Text("Stop Camera") }
+        Text("Last frame: ${state.cameraLastFrameLabel}", color = muted, fontSize = 12.sp)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            Button(onClick = onStart, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = primary)) { Text("Start") }
+            OutlinedButton(onClick = onStop, modifier = Modifier.weight(1f)) { Text("Stop") }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = { viewModel.setCameraLens(CameraLensFacing.BACK) }) {
-                Text(if (state.cameraLensFacing == CameraLensFacing.BACK) "* Back" else "Back")
-            }
-            Button(onClick = { viewModel.setCameraLens(CameraLensFacing.FRONT) }) {
-                Text(if (state.cameraLensFacing == CameraLensFacing.FRONT) "* Front" else "Front")
-            }
-            Button(onClick = { viewModel.setCameraTorch(!state.cameraTorch) }) {
-                Text(if (state.cameraTorch) "Torch On" else "Torch Off")
-            }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            ControlChip("Back", state.cameraLensFacing == CameraLensFacing.BACK, primary) { onLens(CameraLensFacing.BACK) }
+            ControlChip("Front", state.cameraLensFacing == CameraLensFacing.FRONT, primary) { onLens(CameraLensFacing.FRONT) }
+            ControlChip("Torch", state.cameraTorch, primary, icon = Icons.Default.FlashlightOn, onClick = onTorch)
         }
-        Text("Camera FPS ${state.cameraFps}")
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = { viewModel.setCameraFps(state.cameraFps - 1) }) { Text("-") }
-            Button(onClick = { viewModel.setCameraFps(2) }) { Text("2") }
-            Button(onClick = { viewModel.setCameraFps(state.cameraFps + 1) }) { Text("+") }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("FPS ${state.cameraFps}", color = muted, modifier = Modifier.weight(1f))
+            SmallOutlineButton(Icons.Default.Remove, onFpsDown)
+            SmallOutlineButton(Icons.Default.Add, onFpsUp)
         }
-        Text("Camera Quality ${state.cameraQuality}")
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = { viewModel.setCameraQuality(state.cameraQuality - 10) }) { Text("-") }
-            Button(onClick = { viewModel.setCameraQuality(60) }) { Text("60") }
-            Button(onClick = { viewModel.setCameraQuality(state.cameraQuality + 10) }) { Text("+") }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("Quality ${state.cameraQuality}", color = muted, modifier = Modifier.weight(1f))
+            SmallOutlineButton(Icons.Default.Remove, onQualityDown)
+            SmallOutlineButton(Icons.Default.Add, onQualityUp)
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = { viewModel.setCameraResolution(320, 240) }) { Text("Low") }
-            Button(onClick = { viewModel.setCameraResolution(640, 480) }) { Text("Med") }
-            Button(onClick = { viewModel.setCameraResolution(1280, 720) }) { Text("High") }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            ControlChip("Low", state.cameraWidth == 320, primary, icon = Icons.Default.Cameraswitch) { onResolution(320, 240) }
+            ControlChip("Med", state.cameraWidth == 640, primary) { onResolution(640, 480) }
+            ControlChip("High", state.cameraWidth == 1280, primary) { onResolution(1280, 720) }
         }
+    }
+}
 
-        if (state.connecting) {
-            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+@Composable
+private fun ControlChip(label: String, active: Boolean, primary: Color, icon: ImageVector? = null, onClick: () -> Unit) {
+    OutlinedButton(
+        onClick = onClick,
+        shape = RoundedCornerShape(999.dp),
+        colors = ButtonDefaults.outlinedButtonColors(containerColor = if (active) primary else Color.Transparent, contentColor = if (active) Color.White else primary),
+        modifier = Modifier.height(36.dp),
+        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+    ) {
+        if (icon != null) {
+            Icon(icon, contentDescription = null, modifier = Modifier.size(15.dp))
+            Spacer(modifier = Modifier.width(4.dp))
         }
+        Text(label, fontSize = 12.sp)
+    }
+}
 
-        DefaultSoundOptions.chunked(2).forEach { row ->
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                row.forEach { sound ->
-                    Button(
-                        modifier = Modifier.weight(1f),
-                        onClick = { viewModel.play(sound.id) },
-                    ) {
-                        Text(sound.label)
-                    }
+@Composable
+private fun SmallOutlineButton(icon: ImageVector, onClick: () -> Unit) {
+    OutlinedButton(onClick = onClick, modifier = Modifier.size(38.dp), shape = RoundedCornerShape(8.dp), contentPadding = PaddingValues(0.dp)) {
+        Icon(icon, contentDescription = null, modifier = Modifier.size(16.dp))
+    }
+}
+
+@Composable
+private fun ActivityLog(activity: List<String>, primary: Color, gold: Color, outline: Color, muted: Color) {
+    DashboardCard(outline = outline) {
+        SectionTitle(icon = Icons.Default.History, title = "Activity Log", color = primary)
+        if (activity.isEmpty()) {
+            Text("No activity yet", color = muted, fontSize = 13.sp)
+        }
+        activity.reversed().forEach { line ->
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                Box(
+                    modifier = Modifier
+                        .size(30.dp)
+                        .background(activityColor(line, gold).copy(alpha = 0.18f), CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(activityIcon(line), contentDescription = null, tint = activityColor(line, gold), modifier = Modifier.size(16.dp))
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(activityTitle(line), color = if (line.contains("failed", ignoreCase = true) || line.contains("offline", ignoreCase = true)) Color(0xFFBA1A1A) else Color.Black, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    Text(line.drop(10).trim(), color = muted, fontSize = 12.sp)
+                    Text(line.take(8), color = outline, fontSize = 10.sp)
                 }
             }
         }
-
-        Text("Volume ${state.volume}%")
-        Slider(
-            value = state.volume.toFloat(),
-            onValueChange = { viewModel.setVolume(it.toInt()) },
-            valueRange = 0f..100f,
-        )
-
-        Text("Repeats ${state.loops}")
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Button(onClick = viewModel::loopsDown) { Text("-") }
-            Button(onClick = { viewModel.setLoops(0) }) { Text("0") }
-            Button(onClick = viewModel::loopsUp) { Text("+") }
-        }
-
-        Text("Default Timed Sound")
-        OutlinedButton(onClick = { defaultSoundMenuOpen = true }) {
-            Text(selectedDefaultSound.label)
-        }
-        DropdownMenu(
-            expanded = defaultSoundMenuOpen,
-            onDismissRequest = { defaultSoundMenuOpen = false },
-        ) {
-            DefaultSoundOptions.forEach { sound ->
-                DropdownMenuItem(
-                    text = { Text(sound.label) },
-                    onClick = {
-                        viewModel.setDefaultSound(sound.id)
-                        defaultSoundMenuOpen = false
-                    },
-                )
-            }
-        }
-
-        Text("Timed Interval ${state.autoIntervalMinutes} min")
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Button(onClick = viewModel::autoIntervalDown) { Text("-") }
-            Button(onClick = { viewModel.setAutoIntervalMinutes(0) }) { Text("Off") }
-            Button(onClick = viewModel::autoIntervalUp) { Text("+") }
-            Button(onClick = viewModel::applyAutoPlayConfig) { Text("Apply Timer") }
-        }
-
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Button(onClick = viewModel::volumeDown) { Text("-") }
-            Button(onClick = viewModel::volumeUp) { Text("+") }
-            Button(onClick = viewModel::mute) { Text("Mute") }
-            Button(onClick = viewModel::pause) { Text("Pause") }
-            Button(onClick = viewModel::stop) { Text("Stop") }
-        }
-
-        Text("Recent Activity", style = MaterialTheme.typography.titleMedium)
-        state.activity.takeLast(6).forEach {
-            Text(it, style = MaterialTheme.typography.bodyMedium)
-        }
     }
+}
+
+@Composable
+private fun EmergencyButton(modifier: Modifier, onClick: () -> Unit) {
+    IconButton(
+        onClick = onClick,
+        modifier = modifier
+            .size(60.dp)
+            .background(Color(0xFFBA1A1A), CircleShape),
+    ) {
+        Icon(Icons.Default.Emergency, contentDescription = "Emergency buzzer", tint = Color.White, modifier = Modifier.size(32.dp))
+    }
+}
+
+@Composable
+private fun BottomNavigationBar(modifier: Modifier, primary: Color, gold: Color) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(68.dp)
+            .background(Color.White, RoundedCornerShape(topStart = 14.dp, topEnd = 14.dp))
+            .padding(horizontal = 10.dp),
+        horizontalArrangement = Arrangement.SpaceAround,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        BottomNavItem(Icons.Default.Hub, "Nodes", true, primary, gold)
+        BottomNavItem(Icons.Default.Notifications, "Alerts", false, primary, gold)
+        BottomNavItem(Icons.Default.AccessTime, "Schedules", false, primary, gold)
+        BottomNavItem(Icons.Default.Settings, "Settings", false, primary, gold)
+    }
+}
+
+@Composable
+private fun BottomNavItem(icon: ImageVector, label: String, selected: Boolean, primary: Color, gold: Color) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .background(if (selected) gold else Color.Transparent, RoundedCornerShape(999.dp))
+            .padding(horizontal = 12.dp, vertical = 5.dp),
+    ) {
+        Icon(icon, contentDescription = null, tint = if (selected) primary else Color.Black, modifier = Modifier.size(20.dp))
+        Text(label, color = if (selected) primary else Color.Black, fontSize = 10.sp)
+    }
+}
+
+private fun soundIcon(soundId: String): ImageVector = when (soundId) {
+    "dog_barking_1", "dog_barking_2" -> Icons.Default.Pets
+    "monkey_screem" -> Icons.Default.Person
+    "scaring_monkey_sound" -> Icons.Default.Warning
+    "scaring_monkey_sound_2" -> Icons.Default.Campaign
+    "loud_buzzer" -> Icons.Default.NotificationImportant
+    "loud_mixed_alarm" -> Icons.Default.Emergency
+    "gun_shot" -> Icons.Default.Bolt
+    else -> Icons.Default.VolumeUp
+}
+
+private fun activityIcon(line: String): ImageVector = when {
+    line.contains("disconnect", ignoreCase = true) || line.contains("offline", ignoreCase = true) -> Icons.Default.LinkOff
+    line.contains("charging", ignoreCase = true) -> Icons.Default.BatteryChargingFull
+    line.contains("play", ignoreCase = true) || line.contains("command", ignoreCase = true) -> Icons.Default.Send
+    else -> Icons.Default.Info
+}
+
+private fun activityColor(line: String, gold: Color): Color = when {
+    line.contains("failed", ignoreCase = true) || line.contains("offline", ignoreCase = true) -> Color(0xFFBA1A1A)
+    line.contains("charging", ignoreCase = true) -> Color(0xFF1B4332)
+    line.contains("play", ignoreCase = true) || line.contains("command", ignoreCase = true) -> gold
+    else -> Color(0xFF717973)
+}
+
+private fun activityTitle(line: String): String = when {
+    line.contains("failed", ignoreCase = true) -> "Command failed"
+    line.contains("offline", ignoreCase = true) || line.contains("disconnect", ignoreCase = true) -> "Node offline"
+    line.contains("charging", ignoreCase = true) -> "Power status changed"
+    line.contains("play", ignoreCase = true) || line.contains("command", ignoreCase = true) -> "Command sent"
+    else -> "System update"
+}
+
+private fun formatSeconds(seconds: Int): String {
+    val minutes = seconds / 60
+    val remaining = seconds % 60
+    return "%02d:%02d".format(minutes, remaining)
 }
 
 @Composable
@@ -424,7 +1009,7 @@ private fun LoginScreen(
             }
 
             Text(
-                text = "© 2024 Farm Guardian Security Systems",
+                text = "(C) 2024 Farm Guardian Security Systems",
                 color = Color(0xFF8A918D),
                 fontSize = 16.sp,
                 textAlign = TextAlign.Center,
