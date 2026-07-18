@@ -17,6 +17,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -34,7 +35,9 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         requestRuntimePermissions()
-        startForegroundService(Intent(this, NodeService::class.java))
+        if (NodeStatusStore.readLogin(this) != null) {
+            startForegroundService(Intent(this, NodeService::class.java))
+        }
         setContent {
             MaterialTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
@@ -62,6 +65,11 @@ class MainActivity : ComponentActivity() {
 private fun NodeScreen(onStartService: () -> Unit) {
     val context = LocalContext.current
     var snapshot by remember { mutableStateOf(NodeStatusStore.readSnapshot(context)) }
+    var login by remember { mutableStateOf(NodeStatusStore.readLogin(context)) }
+    var username by remember { mutableStateOf(login?.username.orEmpty()) }
+    var password by remember { mutableStateOf(login?.password.orEmpty()) }
+    var nodeId by remember { mutableStateOf(login?.nodeId ?: "Farm-01") }
+    var friendlyName by remember { mutableStateOf(login?.friendlyName ?: "Main Farm") }
 
     LaunchedEffect(Unit) {
         while (true) {
@@ -78,7 +86,25 @@ private fun NodeScreen(onStartService: () -> Unit) {
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text("Farm Guardian Node", style = MaterialTheme.typography.headlineMedium)
-        Text("Node ID: Farm-01")
+
+        if (login == null) {
+            TextField(value = username, onValueChange = { username = it }, label = { Text("Login") })
+            TextField(value = password, onValueChange = { password = it }, label = { Text("Password") })
+            TextField(value = nodeId, onValueChange = { nodeId = it }, label = { Text("Node ID") })
+            TextField(value = friendlyName, onValueChange = { friendlyName = it }, label = { Text("Node Name") })
+            Button(
+                onClick = {
+                    NodeStatusStore.saveLogin(context, username.trim(), password, nodeId.trim(), friendlyName.trim())
+                    login = NodeStatusStore.readLogin(context)
+                    onStartService()
+                },
+            ) {
+                Text("Login and Start Node")
+            }
+            return@Column
+        }
+
+        Text("Node ID: ${login?.nodeId ?: "Unknown"}")
         Text("Connected: ${snapshot.connection}")
         Text("Bluetooth Connected: ${snapshot.bluetooth}")
         Text("Audio Output: ${snapshot.speaker}")
@@ -91,6 +117,15 @@ private fun NodeScreen(onStartService: () -> Unit) {
         Text("Last Seen: ${snapshot.lastSeen}")
         Button(onClick = onStartService) {
             Text("Start Service")
+        }
+        Button(
+            onClick = {
+                context.stopService(Intent(context, NodeService::class.java))
+                NodeStatusStore.clearLogin(context)
+                login = null
+            },
+        ) {
+            Text("Logout Node")
         }
         Button(
             onClick = {

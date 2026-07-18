@@ -15,6 +15,37 @@ object NodeStatusStore {
         prefs(context).edit().putString("connection", connection).apply()
     }
 
+    fun saveLogin(context: Context, username: String, password: String, nodeId: String, friendlyName: String) {
+        prefs(context).edit()
+            .putString("username", username)
+            .putString("password", password)
+            .putString("nodeId", nodeId)
+            .putString("friendlyName", friendlyName)
+            .apply()
+    }
+
+    fun clearLogin(context: Context) {
+        prefs(context).edit()
+            .remove("username")
+            .remove("password")
+            .remove("nodeId")
+            .remove("friendlyName")
+            .putString("connection", "Logged out")
+            .apply()
+    }
+
+    fun readLogin(context: Context): NodeLogin? {
+        val prefs = prefs(context)
+        val username = prefs.getString("username", null)?.takeIf { it.isNotBlank() } ?: return null
+        val password = prefs.getString("password", null)?.takeIf { it.isNotBlank() } ?: return null
+        return NodeLogin(
+            username = username,
+            password = password,
+            nodeId = prefs.getString("nodeId", "Farm-01") ?: "Farm-01",
+            friendlyName = prefs.getString("friendlyName", "Main Farm") ?: "Main Farm",
+        )
+    }
+
     fun saveSnapshot(context: Context, status: NodeStatusPayload, lastCommand: String) {
         prefs(context).edit()
             .putString("connection", if (status.online) "Connected" else "Offline")
@@ -79,4 +110,11 @@ data class NodeUiSnapshot(
     val lastCommand: String,
     val lastSeen: String,
     val logs: List<String>,
+)
+
+data class NodeLogin(
+    val username: String,
+    val password: String,
+    val nodeId: String,
+    val friendlyName: String,
 )

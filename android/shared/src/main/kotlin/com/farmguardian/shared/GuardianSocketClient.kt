@@ -14,10 +14,11 @@ import okhttp3.WebSocketListener
 class GuardianSocketClient(
     private val scope: CoroutineScope,
     private val role: DeviceRole,
+    private val username: String,
+    private val password: String,
     private val friendlyName: String,
     private val backendUrl: String = GuardianConfig.DEFAULT_BACKEND_URL,
     private val nodeId: String = GuardianConfig.DEFAULT_NODE_ID,
-    private val secretKey: String = GuardianConfig.DEFAULT_SECRET,
     private val onState: (ConnectionState) -> Unit,
     private val onMessage: (GuardianMessage) -> Unit,
 ) {
@@ -65,11 +66,12 @@ class GuardianSocketClient(
                 onState(ConnectionState.Connected)
                 send(
                     GuardianMessage(
-                        type = MessageType.HELLO,
-                        hello = HelloPayload(
+                        type = MessageType.LOGIN,
+                        login = LoginPayload(
                             role = role,
+                            username = username,
+                            password = password,
                             nodeId = nodeId,
-                            secretKey = secretKey,
                             friendlyName = friendlyName,
                         ),
                     ),

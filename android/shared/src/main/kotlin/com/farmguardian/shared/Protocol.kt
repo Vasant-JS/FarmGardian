@@ -9,13 +9,27 @@ data class GuardianMessage(
     val type: MessageType,
     val timestamp: Long = System.currentTimeMillis(),
     val hello: HelloPayload? = null,
+    val login: LoginPayload? = null,
+    val targetNodeId: String? = null,
+    val nodeId: String? = null,
+    val friendlyName: String? = null,
     val sound: String? = null,
     val volume: Int? = null,
     val loops: Int? = null,
     val intervalSeconds: Int? = null,
     val status: NodeStatusPayload? = null,
+    val nodes: List<NodeSummary> = emptyList(),
     val ack: AckPayload? = null,
     val reason: String? = null,
+)
+
+@Serializable
+data class LoginPayload(
+    val role: DeviceRole,
+    val username: String,
+    val password: String,
+    val nodeId: String? = null,
+    val friendlyName: String? = null,
 )
 
 @Serializable
@@ -44,6 +58,15 @@ data class NodeStatusPayload(
 )
 
 @Serializable
+data class NodeSummary(
+    val nodeId: String,
+    val friendlyName: String,
+    val online: Boolean,
+    val lastSeen: Long = System.currentTimeMillis(),
+    val status: NodeStatusPayload? = null,
+)
+
+@Serializable
 data class AckPayload(
     val commandId: String,
     val status: AckStatus,
@@ -58,6 +81,7 @@ enum class DeviceRole {
 
 @Serializable
 enum class MessageType {
+    LOGIN,
     HELLO,
     PING,
     PONG,
@@ -65,6 +89,8 @@ enum class MessageType {
     STOP,
     PAUSE,
     AUTO_PLAY_CONFIG,
+    NODE_LIST,
+    DISCONNECT_NODE,
     STATUS,
     HEARTBEAT,
     ACK,

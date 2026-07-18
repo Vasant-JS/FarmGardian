@@ -23,6 +23,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -56,6 +57,8 @@ class MainActivity : ComponentActivity() {
 private fun ControllerScreen(viewModel: ControllerViewModel = viewModel()) {
     val state by viewModel.state.collectAsState()
     var defaultSoundMenuOpen by remember { mutableStateOf(false) }
+    var username by remember { mutableStateOf(state.username) }
+    var password by remember { mutableStateOf(state.password) }
     val selectedDefaultSound = DefaultSoundOptions.firstOrNull { it.id == state.defaultSoundId } ?: DefaultSoundOptions.first()
 
     Column(
@@ -66,7 +69,50 @@ private fun ControllerScreen(viewModel: ControllerViewModel = viewModel()) {
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Text("Farm Guardian", style = MaterialTheme.typography.headlineMedium)
+
+        if (!state.loggedIn) {
+            TextField(
+                value = username,
+                onValueChange = { username = it },
+                label = { Text("Login") },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            TextField(
+                value = password,
+                onValueChange = { password = it },
+                label = { Text("Password") },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Button(onClick = { viewModel.login(username, password) }) {
+                Text("Login")
+            }
+            state.activity.takeLast(3).forEach {
+                Text(it, style = MaterialTheme.typography.bodyMedium)
+            }
+            return@Column
+        }
+
         Text("Backend: ${state.backendStatus}")
+        Button(onClick = viewModel::logout) { Text("Logout") }
+
+        Text("Connected Nodes", style = MaterialTheme.typography.titleMedium)
+        if (state.nodes.isEmpty()) {
+            Text("No nodes connected")
+        }
+        state.nodes.forEach { node ->
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    modifier = Modifier.weight(1f),
+                    onClick = { viewModel.selectNode(node.nodeId) },
+                ) {
+                    Text("${if (node.nodeId == state.selectedNodeId) "* " else ""}${node.friendlyName} - ${if (node.online) "Online" else "Offline"}")
+                }
+                Button(onClick = { viewModel.disconnectNode(node.nodeId) }) {
+                    Text("Disconnect")
+                }
+            }
+        }
+
         Text("Node: ${state.nodeStatusLabel}")
         Text("Battery: ${state.batteryLabel} - ${state.chargingLabel}")
         Text("Network: ${state.networkLabel}")

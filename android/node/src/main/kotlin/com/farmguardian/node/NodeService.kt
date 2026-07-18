@@ -68,11 +68,20 @@ class NodeService : Service() {
                 },
             )
         }
+        val login = NodeStatusStore.readLogin(this)
+        if (login == null) {
+            NodeStatusStore.appendLog(this, "Login", "Missing credentials")
+            stopSelf()
+            return
+        }
         NodeStatusStore.appendLog(this, "Service", "Started")
         socket = GuardianSocketClient(
             scope = serviceScope,
             role = DeviceRole.NODE,
-            friendlyName = "Main Farm",
+            username = login.username,
+            password = login.password,
+            nodeId = login.nodeId,
+            friendlyName = login.friendlyName,
             backendUrl = BuildConfig.BACKEND_WS_URL,
             onState = ::applyConnectionState,
             onMessage = ::handleMessage,
@@ -103,9 +112,16 @@ class NodeService : Service() {
                 MessageType.PAUSE -> pause(message.id)
                 MessageType.STOP -> stop(message.id)
                 MessageType.AUTO_PLAY_CONFIG -> configureAutoPlay(message)
+                MessageType.DISCONNECT_NODE -> disconnectFromController()
                 else -> Unit
             }
         }
+    }
+
+    private fun disconnectFromController() {
+        NodeStatusStore.appendLog(this, "Disconnected", "Requested by controller")
+        socket.stop()
+        stopSelf()
     }
 
     private fun applyConnectionState(connectionState: ConnectionState) {

@@ -59,39 +59,46 @@ fun Application.farmGuardianBackend() {
 }
 
 private class FarmSessions {
-    private val nodes = ConcurrentHashMap<String, WebSocketSession>()
+    private val users = ConcurrentHashMap<String, String>()
+    private val nodes = ConcurrentHashMap<String, ConcurrentHashMap<String, WebSocketSession>>()
+    private val nodeNames = ConcurrentHashMap<String, ConcurrentHashMap<String, String>>()
     private val controllers = ConcurrentHashMap<String, MutableSet<WebSocketSession>>()
-    private val lastStatus = ConcurrentHashMap<String, NodeStatusPayload>()
-    private val secret = System.getenv("FARM_GUARDIAN_SECRET").orEmpty().ifBlank { "secret" }
+    private val lastStatus = ConcurrentHashMap<String, ConcurrentHashMap<String, NodeStatusPayload>>()
 
     suspend fun tryRegister(envelope: GuardianMessage, session: WebSocketSession): DeviceRegistration? {
-        if (envelope.type != "HELLO") {
-            session.sendAck(envelope.id, AckStatus.FAILED, "ExpectedHello")
+        if (envelope.type != "LOGIN") {
+            session.sendAck(envelope.id, AckStatus.FAILED, "ExpectedLogin")
             return null
         }
 
-        val hello = envelope.hello
-        if (hello == null) {
-            session.sendAck(envelope.id, AckStatus.FAILED, "MissingHello")
+        val login = envelope.login
+        if (login == null || login.username.isBlank() || login.password.isBlank()) {
+            session.sendAck(envelope.id, AckStatus.FAILED, "MissingLogin")
             return null
         }
 
-        if (hello.secretKey != secret) {
-            session.sendAck(envelope.id, AckStatus.FAILED, "InvalidSecret")
+        val existingPassword = users.putIfAbsent(login.username, login.password)
+        if (existingPassword != null && existingPassword != login.password) {
+            session.sendAck(envelope.id, AckStatus.FAILED, "InvalidLogin")
             return null
         }
 
-        val registration = DeviceRegistration(hello.role, hello.nodeId)
+        val nodeId = login.nodeId?.takeIf { it.isNotBlank() } ?: "controller"
+        val registration = DeviceRegistration(login.role, login.username, nodeId)
         when (registration.role) {
             DeviceRole.NODE -> {
-                nodes[registration.nodeId] = session
-                val onlineStatus = (lastStatus[registration.nodeId] ?: NodeStatusPayload()).copy(online = true)
-                lastStatus[registration.nodeId] = onlineStatus
-                broadcastStatus(registration.nodeId, onlineStatus)
+                nodes.computeIfAbsent(registration.username) { ConcurrentHashMap() }[registration.nodeId] = session
+                nodeNames.computeIfAbsent(registration.username) { ConcurrentHashMap() }[registration.nodeId] =
+                    login.friendlyName ?: registration.nodeId
+                val statuses = lastStatus.computeIfAbsent(registration.username) { ConcurrentHashMap() }
+                val onlineStatus = (statuses[registration.nodeId] ?: NodeStatusPayload()).copy(online = true)
+                statuses[registration.nodeId] = onlineStatus
+                broadcastNodeList(registration.username)
+                broadcastStatus(registration.username, registration.nodeId, onlineStatus)
             }
             DeviceRole.CONTROLLER -> {
-                controllers.computeIfAbsent(registration.nodeId) { ConcurrentHashMap.newKeySet() }.add(session)
-                lastStatus[registration.nodeId]?.let { session.sendStatus(it) }
+                controllers.computeIfAbsent(registration.username) { ConcurrentHashMap.newKeySet() }.add(session)
+                session.sendNodeList(nodeSummaries(registration.username))
             }
         }
         session.sendAck(envelope.id, AckStatus.SUCCESS)
@@ -101,15 +108,17 @@ private class FarmSessions {
     suspend fun unregister(registration: DeviceRegistration, session: WebSocketSession) {
         when (registration.role) {
             DeviceRole.NODE -> {
-                nodes.remove(registration.nodeId, session)
-                val offline = (lastStatus[registration.nodeId] ?: NodeStatusPayload()).copy(
+                nodes[registration.username]?.remove(registration.nodeId, session)
+                val statuses = lastStatus.computeIfAbsent(registration.username) { ConcurrentHashMap() }
+                val offline = (statuses[registration.nodeId] ?: NodeStatusPayload()).copy(
                     online = false,
                     lastSeen = System.currentTimeMillis(),
                 )
-                lastStatus[registration.nodeId] = offline
-                broadcastStatus(registration.nodeId, offline)
+                statuses[registration.nodeId] = offline
+                broadcastNodeList(registration.username)
+                broadcastStatus(registration.username, registration.nodeId, offline)
             }
-            DeviceRole.CONTROLLER -> controllers[registration.nodeId]?.remove(session)
+            DeviceRole.CONTROLLER -> controllers[registration.username]?.remove(session)
         }
     }
 
@@ -120,34 +129,74 @@ private class FarmSessions {
         }
 
         when (from.role) {
-            DeviceRole.CONTROLLER -> routeControllerCommand(from.nodeId, envelope)
-            DeviceRole.NODE -> routeNodeMessage(from.nodeId, envelope)
+            DeviceRole.CONTROLLER -> routeControllerCommand(from.username, envelope)
+            DeviceRole.NODE -> routeNodeMessage(from.username, from.nodeId, envelope)
         }
     }
 
-    private suspend fun routeControllerCommand(nodeId: String, envelope: GuardianMessage) {
-        val node = nodes[nodeId]
+    private suspend fun routeControllerCommand(username: String, envelope: GuardianMessage) {
+        val nodeId = envelope.targetNodeId
+        if (nodeId.isNullOrBlank()) {
+            controllers[username]?.forEach { it.sendAck(envelope.id, AckStatus.FAILED, "NoNodeSelected") }
+            return
+        }
+
+        if (envelope.type == "DISCONNECT_NODE") {
+            nodes[username]?.remove(nodeId)?.sendMessage(envelope)
+            val statuses = lastStatus.computeIfAbsent(username) { ConcurrentHashMap() }
+            statuses[nodeId] = (statuses[nodeId] ?: NodeStatusPayload()).copy(online = false, lastSeen = System.currentTimeMillis())
+            broadcastNodeList(username)
+            controllers[username]?.forEach { it.sendAck(envelope.id, AckStatus.SUCCESS) }
+            return
+        }
+
+        val node = nodes[username]?.get(nodeId)
         if (node == null) {
-            controllers[nodeId]?.forEach { it.sendAck(envelope.id, AckStatus.FAILED, "NodeOffline") }
+            controllers[username]?.forEach { it.sendAck(envelope.id, AckStatus.FAILED, "NodeOffline") }
             return
         }
         node.sendMessage(envelope)
     }
 
-    private suspend fun routeNodeMessage(nodeId: String, envelope: GuardianMessage) {
+    private suspend fun routeNodeMessage(username: String, nodeId: String, envelope: GuardianMessage) {
         val status = envelope.status
         if (status != null) {
-            lastStatus[nodeId] = status.copy(online = true, lastSeen = System.currentTimeMillis())
+            lastStatus.computeIfAbsent(username) { ConcurrentHashMap() }[nodeId] =
+                status.copy(online = true, lastSeen = System.currentTimeMillis())
+            broadcastNodeList(username)
         }
 
         when (envelope.type) {
-            "STATUS", "HEARTBEAT", "ACK" -> controllers[nodeId]?.forEach { it.sendMessage(envelope) }
-            else -> controllers[nodeId]?.forEach { it.sendMessage(envelope) }
+            "STATUS", "HEARTBEAT", "ACK" -> controllers[username]?.forEach { it.sendMessage(envelope.copy(nodeId = nodeId)) }
+            else -> controllers[username]?.forEach { it.sendMessage(envelope.copy(nodeId = nodeId)) }
         }
     }
 
-    private suspend fun broadcastStatus(nodeId: String, status: NodeStatusPayload) {
-        controllers[nodeId]?.forEach { it.sendStatus(status) }
+    private suspend fun broadcastStatus(username: String, nodeId: String, status: NodeStatusPayload) {
+        controllers[username]?.forEach { it.sendStatus(nodeId, status) }
+    }
+
+    private suspend fun broadcastNodeList(username: String) {
+        controllers[username]?.forEach { it.sendNodeList(nodeSummaries(username)) }
+    }
+
+    private fun nodeSummaries(username: String): List<NodeSummary> {
+        val sessions = nodes[username].orEmpty()
+        val names = nodeNames[username].orEmpty()
+        val statuses = lastStatus[username].orEmpty()
+        return (names.keys + statuses.keys + sessions.keys)
+            .distinct()
+            .sorted()
+            .map { nodeId ->
+                val status = statuses[nodeId]
+                NodeSummary(
+                    nodeId = nodeId,
+                    friendlyName = names[nodeId] ?: nodeId,
+                    online = sessions.containsKey(nodeId) && status?.online != false,
+                    lastSeen = status?.lastSeen ?: System.currentTimeMillis(),
+                    status = status,
+                )
+            }
     }
 }
 
@@ -155,8 +204,12 @@ private suspend fun WebSocketSession.sendMessage(message: GuardianMessage) {
     send(Frame.Text(json.encodeToString(GuardianMessage.serializer(), message)))
 }
 
-private suspend fun WebSocketSession.sendStatus(status: NodeStatusPayload) {
-    sendMessage(GuardianMessage(type = "STATUS", status = status))
+private suspend fun WebSocketSession.sendStatus(nodeId: String, status: NodeStatusPayload) {
+    sendMessage(GuardianMessage(type = "STATUS", nodeId = nodeId, status = status))
+}
+
+private suspend fun WebSocketSession.sendNodeList(nodes: List<NodeSummary>) {
+    sendMessage(GuardianMessage(type = "NODE_LIST", nodes = nodes))
 }
 
 private suspend fun WebSocketSession.sendAck(commandId: String, ackStatus: AckStatus, reason: String? = null) {
@@ -174,6 +227,7 @@ private suspend fun WebSocketSession.sendAck(commandId: String, ackStatus: AckSt
 
 private data class DeviceRegistration(
     val role: DeviceRole,
+    val username: String,
     val nodeId: String,
 )
 
@@ -183,13 +237,27 @@ data class GuardianMessage(
     val type: String,
     val timestamp: Long = System.currentTimeMillis(),
     val hello: HelloPayload? = null,
+    val login: LoginPayload? = null,
+    val targetNodeId: String? = null,
+    val nodeId: String? = null,
+    val friendlyName: String? = null,
     val sound: String? = null,
     val volume: Int? = null,
     val loops: Int? = null,
     val intervalSeconds: Int? = null,
     val status: NodeStatusPayload? = null,
+    val nodes: List<NodeSummary> = emptyList(),
     val ack: AckPayload? = null,
     val reason: String? = null,
+)
+
+@Serializable
+data class LoginPayload(
+    val role: DeviceRole,
+    val username: String,
+    val password: String,
+    val nodeId: String? = null,
+    val friendlyName: String? = null,
 )
 
 @Serializable
@@ -215,6 +283,15 @@ data class NodeStatusPayload(
     val remainingSeconds: Int? = null,
     val phoneTemperatureCelsius: Float? = null,
     val lastSeen: Long = System.currentTimeMillis(),
+)
+
+@Serializable
+data class NodeSummary(
+    val nodeId: String,
+    val friendlyName: String,
+    val online: Boolean,
+    val lastSeen: Long = System.currentTimeMillis(),
+    val status: NodeStatusPayload? = null,
 )
 
 @Serializable
