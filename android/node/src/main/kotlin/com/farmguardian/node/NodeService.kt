@@ -43,12 +43,17 @@ class NodeService : Service() {
     private lateinit var socket: GuardianSocketClient
     private var player: ExoPlayer? = null
     private var healthJob: Job? = null
+    private var autoPlayJob: Job? = null
     private var lastCommand = "none"
     private var currentSound: String? = null
     private var playbackState = PlaybackState.Stopped
     private var durationSeconds: Int? = null
     private var remainingLoops = 0
     private var activeResId: Int? = null
+    private var autoSoundId: String? = null
+    private var autoIntervalSeconds = 0
+    private var autoLoops = 0
+    private var autoVolume = 80
 
     override fun onCreate() {
         super.onCreate()
@@ -83,6 +88,7 @@ class NodeService : Service() {
     override fun onDestroy() {
         NodeStatusStore.appendLog(this, "Service", "Stopped")
         healthJob?.cancel()
+        autoPlayJob?.cancel()
         socket.stop()
         player?.release()
         player = null
@@ -96,6 +102,7 @@ class NodeService : Service() {
                 MessageType.PLAY -> play(message)
                 MessageType.PAUSE -> pause(message.id)
                 MessageType.STOP -> stop(message.id)
+                MessageType.AUTO_PLAY_CONFIG -> configureAutoPlay(message)
                 else -> Unit
             }
         }
@@ -150,6 +157,60 @@ class NodeService : Service() {
         }.onFailure {
             NodeStatusStore.appendLog(this, "Played $sound", "Failed: ${it.message.orEmpty()}")
             acknowledge(message.id, AckStatus.FAILED, it.message ?: "PlaybackFailed")
+        }
+    }
+
+    private fun configureAutoPlay(message: GuardianMessage) {
+        val intervalSeconds = (message.intervalSeconds ?: 0).coerceIn(0, 86_400)
+        val sound = message.sound
+
+        if (intervalSeconds == 0) {
+            autoPlayJob?.cancel()
+            autoPlayJob = null
+            autoSoundId = null
+            autoIntervalSeconds = 0
+            lastCommand = "AUTO OFF"
+            NodeStatusStore.appendLog(this, "Auto play", "Disabled")
+            acknowledge(message.id, AckStatus.SUCCESS)
+            sendStatus(MessageType.STATUS)
+            return
+        }
+
+        if (sound.isNullOrBlank() || resources.getIdentifier(sound, "raw", packageName) == 0) {
+            acknowledge(message.id, AckStatus.FAILED, "FileMissing")
+            NodeStatusStore.appendLog(this, "Auto play", "Failed: missing sound")
+            return
+        }
+
+        autoSoundId = sound
+        autoIntervalSeconds = intervalSeconds
+        autoLoops = (message.loops ?: 0).coerceIn(0, 20)
+        autoVolume = (message.volume ?: 80).coerceIn(0, 100)
+        lastCommand = "AUTO $sound ${intervalSeconds}s"
+        NodeStatusStore.appendLog(this, "Auto play", "Every ${intervalSeconds}s: $sound")
+        startAutoPlayLoop()
+        acknowledge(message.id, AckStatus.SUCCESS)
+        sendStatus(MessageType.STATUS)
+    }
+
+    private fun startAutoPlayLoop() {
+        autoPlayJob?.cancel()
+        val sound = autoSoundId ?: return
+        val intervalMs = autoIntervalSeconds * 1000L
+        if (intervalMs <= 0) return
+
+        autoPlayJob = serviceScope.launch {
+            while (true) {
+                delay(intervalMs)
+                play(
+                    GuardianMessage(
+                        type = MessageType.PLAY,
+                        sound = sound,
+                        volume = autoVolume,
+                        loops = autoLoops,
+                    ),
+                )
+            }
         }
     }
 

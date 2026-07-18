@@ -15,14 +15,20 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -49,6 +55,8 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun ControllerScreen(viewModel: ControllerViewModel = viewModel()) {
     val state by viewModel.state.collectAsState()
+    var defaultSoundMenuOpen by remember { mutableStateOf(false) }
+    val selectedDefaultSound = DefaultSoundOptions.firstOrNull { it.id == state.defaultSoundId } ?: DefaultSoundOptions.first()
 
     Column(
         modifier = Modifier
@@ -99,6 +107,33 @@ private fun ControllerScreen(viewModel: ControllerViewModel = viewModel()) {
             Button(onClick = viewModel::loopsDown) { Text("-") }
             Button(onClick = { viewModel.setLoops(0) }) { Text("0") }
             Button(onClick = viewModel::loopsUp) { Text("+") }
+        }
+
+        Text("Default Timed Sound")
+        OutlinedButton(onClick = { defaultSoundMenuOpen = true }) {
+            Text(selectedDefaultSound.label)
+        }
+        DropdownMenu(
+            expanded = defaultSoundMenuOpen,
+            onDismissRequest = { defaultSoundMenuOpen = false },
+        ) {
+            DefaultSoundOptions.forEach { sound ->
+                DropdownMenuItem(
+                    text = { Text(sound.label) },
+                    onClick = {
+                        viewModel.setDefaultSound(sound.id)
+                        defaultSoundMenuOpen = false
+                    },
+                )
+            }
+        }
+
+        Text("Timed Interval ${state.autoIntervalMinutes} min")
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Button(onClick = viewModel::autoIntervalDown) { Text("-") }
+            Button(onClick = { viewModel.setAutoIntervalMinutes(0) }) { Text("Off") }
+            Button(onClick = viewModel::autoIntervalUp) { Text("+") }
+            Button(onClick = viewModel::applyAutoPlayConfig) { Text("Apply Timer") }
         }
 
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {

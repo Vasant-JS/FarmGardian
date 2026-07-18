@@ -186,6 +186,7 @@ data class GuardianMessage(
     val sound: String? = null,
     val volume: Int? = null,
     val loops: Int? = null,
+    val intervalSeconds: Int? = null,
     val status: NodeStatusPayload? = null,
     val ack: AckPayload? = null,
     val reason: String? = null,

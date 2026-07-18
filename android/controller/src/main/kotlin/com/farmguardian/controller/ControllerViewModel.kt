@@ -62,6 +62,37 @@ class ControllerViewModel : ViewModel() {
         _state.update { it.copy(loops = loops.coerceIn(0, 20)) }
     }
 
+    fun setDefaultSound(soundId: String) {
+        _state.update { it.copy(defaultSoundId = soundId) }
+    }
+
+    fun setAutoIntervalMinutes(minutes: Int) {
+        _state.update { it.copy(autoIntervalMinutes = minutes.coerceIn(0, 1440)) }
+    }
+
+    fun autoIntervalUp() = setAutoIntervalMinutes(state.value.autoIntervalMinutes + 1)
+
+    fun autoIntervalDown() = setAutoIntervalMinutes(state.value.autoIntervalMinutes - 1)
+
+    fun applyAutoPlayConfig() {
+        val sound = DefaultSoundOptions.firstOrNull { it.id == state.value.defaultSoundId } ?: DefaultSoundOptions.first()
+        val intervalSeconds = state.value.autoIntervalMinutes * 60
+        send(
+            GuardianMessage(
+                type = MessageType.AUTO_PLAY_CONFIG,
+                sound = sound.id,
+                volume = state.value.volume,
+                loops = state.value.loops,
+                intervalSeconds = intervalSeconds,
+            ),
+            if (intervalSeconds > 0) {
+                "Auto play set: ${sound.label} every ${state.value.autoIntervalMinutes} min"
+            } else {
+                "Auto play disabled"
+            },
+        )
+    }
+
     fun mute() = setVolume(0)
 
     fun volumeUp() = setVolume(state.value.volume + 5)
@@ -148,5 +179,7 @@ data class ControllerState(
     val lastSeenLabel: String = "Never",
     val volume: Int = 80,
     val loops: Int = 0,
+    val defaultSoundId: String = DefaultSoundOptions.first().id,
+    val autoIntervalMinutes: Int = 0,
     val activity: List<String> = emptyList(),
 )
