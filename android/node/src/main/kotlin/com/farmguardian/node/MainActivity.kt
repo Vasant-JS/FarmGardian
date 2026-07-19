@@ -10,6 +10,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -126,6 +127,7 @@ private fun NodeScreen(onStartService: () -> Unit) {
     LaunchedEffect(Unit) {
         while (true) {
             snapshot = NodeStatusStore.readSnapshot(context)
+            login = NodeStatusStore.readLogin(context)
             delay(1_000)
         }
     }
@@ -180,6 +182,7 @@ private fun NodeDashboardScreen(
     val gold = Color(0xFFFFB702)
     val connected = snapshot.connection.equals("Connected", ignoreCase = true)
     val playing = snapshot.playback.equals("Playing", ignoreCase = true)
+    var selectedNav by remember { mutableStateOf("Nodes") }
 
     Box(
         modifier = Modifier
@@ -380,8 +383,10 @@ private fun NodeDashboardScreen(
 
         NodeBottomNav(
             modifier = Modifier.align(Alignment.BottomCenter),
+            selected = selectedNav,
             primary = primary,
             gold = gold,
+            onSelect = { selectedNav = it },
         )
     }
 }
@@ -493,7 +498,13 @@ private fun LogRow(line: String, primary: Color, gold: Color, muted: Color) {
 }
 
 @Composable
-private fun NodeBottomNav(modifier: Modifier, primary: Color, gold: Color) {
+private fun NodeBottomNav(
+    modifier: Modifier,
+    selected: String,
+    primary: Color,
+    gold: Color,
+    onSelect: (String) -> Unit,
+) {
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -503,19 +514,27 @@ private fun NodeBottomNav(modifier: Modifier, primary: Color, gold: Color) {
         horizontalArrangement = Arrangement.SpaceAround,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        NodeNavItem(Icons.Default.Hub, "Nodes", true, primary, gold)
-        NodeNavItem(Icons.Default.Notifications, "Alerts", false, primary, gold)
-        NodeNavItem(Icons.Default.Timer, "Schedules", false, primary, gold)
-        NodeNavItem(Icons.Default.Settings, "Settings", false, primary, gold)
+        NodeNavItem(Icons.Default.Hub, "Nodes", selected == "Nodes", primary, gold) { onSelect("Nodes") }
+        NodeNavItem(Icons.Default.Notifications, "Alerts", selected == "Alerts", primary, gold) { onSelect("Alerts") }
+        NodeNavItem(Icons.Default.Timer, "Schedules", selected == "Schedules", primary, gold) { onSelect("Schedules") }
+        NodeNavItem(Icons.Default.Settings, "Settings", selected == "Settings", primary, gold) { onSelect("Settings") }
     }
 }
 
 @Composable
-private fun NodeNavItem(icon: ImageVector, label: String, selected: Boolean, primary: Color, gold: Color) {
+private fun NodeNavItem(
+    icon: ImageVector,
+    label: String,
+    selected: Boolean,
+    primary: Color,
+    gold: Color,
+    onClick: () -> Unit,
+) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
             .background(if (selected) gold else Color.Transparent, RoundedCornerShape(999.dp))
+            .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 6.dp),
     ) {
         Icon(icon, contentDescription = null, tint = if (selected) primary else Color.Black, modifier = Modifier.size(21.dp))

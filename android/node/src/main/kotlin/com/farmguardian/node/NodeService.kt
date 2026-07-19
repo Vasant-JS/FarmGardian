@@ -144,6 +144,8 @@ class NodeService : LifecycleService() {
 
     private fun disconnectFromController() {
         NodeStatusStore.appendLog(this, "Disconnected", "Requested by controller")
+        NodeStatusStore.clearLogin(this)
+        stopCameraStream()
         socket.stop()
         stopSelf()
     }
@@ -390,34 +392,55 @@ class NodeService : LifecycleService() {
         val providerFuture = ProcessCameraProvider.getInstance(this)
         providerFuture.addListener(
             {
-                val provider = providerFuture.get()
-                cameraProvider = provider
-                val selector = CameraSelector.Builder()
-                    .requireLensFacing(
-                        if (config.lensFacing == CameraLensFacing.FRONT) {
-                            CameraSelector.LENS_FACING_FRONT
-                        } else {
-                            CameraSelector.LENS_FACING_BACK
-                        },
-                    )
-                    .build()
-                val analysis = ImageAnalysis.Builder()
-                    .setTargetResolution(Size(config.width, config.height))
-                    .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                    .build()
-                analysis.setAnalyzer(cameraExecutor ?: Executors.newSingleThreadExecutor()) { image ->
-                    handleCameraImage(image)
-                }
+                runCatching {
+                    val provider = providerFuture.get()
+                    cameraProvider = provider
+                    val selector = selectCamera(provider, config.lensFacing)
+                    val analysis = ImageAnalysis.Builder()
+                        .setTargetResolution(Size(config.width, config.height))
+                        .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                        .build()
+                    analysis.setAnalyzer(cameraExecutor ?: Executors.newSingleThreadExecutor()) { image ->
+                        handleCameraImage(image)
+                    }
 
-                provider.unbindAll()
-                camera = provider.bindToLifecycle(this, selector, analysis)
-                camera?.cameraControl?.enableTorch(config.torch)
-                cameraActive = true
-                NodeStatusStore.appendLog(this, "Camera", "Started ${config.width}x${config.height} ${config.fps}fps")
-                sendStatus(MessageType.STATUS)
+                    provider.unbindAll()
+                    camera = provider.bindToLifecycle(this, selector, analysis)
+                    camera?.cameraControl?.enableTorch(config.torch)
+                    cameraActive = true
+                    NodeStatusStore.appendLog(this, "Camera", "Started ${config.width}x${config.height} ${config.fps}fps ${config.lensFacing}")
+                    sendStatus(MessageType.STATUS)
+                }.onFailure {
+                    cameraActive = false
+                    NodeStatusStore.appendLog(this, "Camera", "Failed: ${it.message ?: "Unavailable"}")
+                    sendStatus(MessageType.STATUS)
+                }
             },
             ContextCompat.getMainExecutor(this),
         )
+    }
+
+    private fun selectCamera(provider: ProcessCameraProvider, requested: CameraLensFacing): CameraSelector {
+        val requestedLens = if (requested == CameraLensFacing.FRONT) {
+            CameraSelector.LENS_FACING_FRONT
+        } else {
+            CameraSelector.LENS_FACING_BACK
+        }
+        val requestedSelector = CameraSelector.Builder().requireLensFacing(requestedLens).build()
+        if (provider.hasCamera(requestedSelector)) return requestedSelector
+
+        val fallbackLens = if (requestedLens == CameraSelector.LENS_FACING_FRONT) {
+            CameraSelector.LENS_FACING_BACK
+        } else {
+            CameraSelector.LENS_FACING_FRONT
+        }
+        val fallbackSelector = CameraSelector.Builder().requireLensFacing(fallbackLens).build()
+        if (provider.hasCamera(fallbackSelector)) {
+            NodeStatusStore.appendLog(this, "Camera", "Fallback lens used")
+            return fallbackSelector
+        }
+
+        throw IllegalStateException("No camera available")
     }
 
     private fun stopCameraStream() {
@@ -461,21 +484,26 @@ class NodeService : LifecycleService() {
     }
 
     private fun ImageProxy.toNv21(): ByteArray {
+        val nv21 = ByteArray(width * height * 3 / 2)
         val yPlane = planes[0]
+        val yBuffer = yPlane.buffer.duplicate()
+        var yOffset = 0
+        for (row in 0 until height) {
+            val rowStart = row * yPlane.rowStride
+            for (col in 0 until width) {
+                nv21[yOffset++] = yBuffer.get(rowStart + col * yPlane.pixelStride)
+            }
+        }
+
         val uPlane = planes[1]
         val vPlane = planes[2]
-        val yBuffer = yPlane.buffer
-        val uBuffer = uPlane.buffer
-        val vBuffer = vPlane.buffer
-        val nv21 = ByteArray(width * height * 3 / 2)
-        yBuffer.get(nv21, 0, width * height)
-        val chromaHeight = height / 2
-        val chromaWidth = width / 2
-        var offset = width * height
-        for (row in 0 until chromaHeight) {
-            for (col in 0 until chromaWidth) {
-                nv21[offset++] = vBuffer.get(row * vPlane.rowStride + col * vPlane.pixelStride)
-                nv21[offset++] = uBuffer.get(row * uPlane.rowStride + col * uPlane.pixelStride)
+        val uBuffer = uPlane.buffer.duplicate()
+        val vBuffer = vPlane.buffer.duplicate()
+        var uvOffset = width * height
+        for (row in 0 until height / 2) {
+            for (col in 0 until width / 2) {
+                nv21[uvOffset++] = vBuffer.get(row * vPlane.rowStride + col * vPlane.pixelStride)
+                nv21[uvOffset++] = uBuffer.get(row * uPlane.rowStride + col * uPlane.pixelStride)
             }
         }
         return nv21

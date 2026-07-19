@@ -88,6 +88,7 @@ class ControllerViewModel : ViewModel() {
     fun selectNode(nodeId: String) {
         _state.update { it.copy(selectedNodeId = nodeId) }
         state.value.nodes.firstOrNull { it.nodeId == nodeId }?.status?.let(::applyStatus)
+        if (state.value.cameraEnabled) sendCameraConfig(state.value, nodeId, "Camera switched to $nodeId")
     }
 
     fun disconnectNode(nodeId: String) {
@@ -102,45 +103,30 @@ class ControllerViewModel : ViewModel() {
     }
 
     fun setCameraLens(lensFacing: CameraLensFacing) {
-        _state.update { it.copy(cameraLensFacing = lensFacing) }
+        updateCameraConfig("Camera lens changed") { it.copy(cameraLensFacing = lensFacing) }
     }
 
     fun setCameraFps(fps: Int) {
-        _state.update { it.copy(cameraFps = fps.coerceIn(1, 10)) }
+        updateCameraConfig("Camera FPS changed") { it.copy(cameraFps = fps.coerceIn(1, 8)) }
     }
 
     fun setCameraQuality(quality: Int) {
-        _state.update { it.copy(cameraQuality = quality.coerceIn(20, 95)) }
+        updateCameraConfig("Camera quality changed") { it.copy(cameraQuality = quality.coerceIn(25, 75)) }
     }
 
     fun setCameraResolution(width: Int, height: Int) {
-        _state.update { it.copy(cameraWidth = width, cameraHeight = height) }
+        updateCameraConfig("Camera resolution changed") { it.copy(cameraWidth = width, cameraHeight = height) }
     }
 
     fun setCameraTorch(torch: Boolean) {
-        _state.update { it.copy(cameraTorch = torch) }
+        updateCameraConfig("Camera torch changed") { it.copy(cameraTorch = torch) }
     }
 
     fun applyCameraConfig(enabled: Boolean = state.value.cameraEnabled) {
         val targetNodeId = selectedNodeIdOrLog() ?: return
-        _state.update { it.copy(cameraEnabled = enabled) }
         val config = state.value.copy(cameraEnabled = enabled)
-        send(
-            GuardianMessage(
-                type = MessageType.CAMERA_CONFIG,
-                targetNodeId = targetNodeId,
-                camera = CameraConfigPayload(
-                    enabled = enabled,
-                    lensFacing = config.cameraLensFacing,
-                    fps = config.cameraFps,
-                    quality = config.cameraQuality,
-                    width = config.cameraWidth,
-                    height = config.cameraHeight,
-                    torch = config.cameraTorch,
-                ),
-            ),
-            if (enabled) "Camera stream requested" else "Camera stream stopped",
-        )
+        _state.update { config }
+        sendCameraConfig(config, targetNodeId, if (enabled) "Camera stream requested" else "Camera stream stopped")
     }
 
     fun setVolume(volume: Int) {
@@ -201,6 +187,39 @@ class ControllerViewModel : ViewModel() {
     private fun send(message: GuardianMessage, activity: String) {
         val sent = socket?.send(message) == true
         log(if (sent) activity else "Unable to send: backend disconnected")
+    }
+
+    private fun updateCameraConfig(activity: String, transform: (ControllerState) -> ControllerState) {
+        var updated = state.value
+        _state.update {
+            transform(it).also { next -> updated = next }
+        }
+        if (updated.cameraEnabled) {
+            val targetNodeId = updated.selectedNodeId ?: run {
+                log("Select an online node first")
+                return
+            }
+            sendCameraConfig(updated, targetNodeId, activity)
+        }
+    }
+
+    private fun sendCameraConfig(config: ControllerState, targetNodeId: String, activity: String) {
+        send(
+            GuardianMessage(
+                type = MessageType.CAMERA_CONFIG,
+                targetNodeId = targetNodeId,
+                camera = CameraConfigPayload(
+                    enabled = config.cameraEnabled,
+                    lensFacing = config.cameraLensFacing,
+                    fps = config.cameraFps,
+                    quality = config.cameraQuality,
+                    width = config.cameraWidth,
+                    height = config.cameraHeight,
+                    torch = config.cameraTorch,
+                ),
+            ),
+            activity,
+        )
     }
 
     private fun handleMessage(message: GuardianMessage) {
@@ -316,10 +335,10 @@ data class ControllerState(
     val selectedNodeId: String? = null,
     val cameraEnabled: Boolean = false,
     val cameraLensFacing: CameraLensFacing = CameraLensFacing.BACK,
-    val cameraFps: Int = 2,
-    val cameraQuality: Int = 60,
-    val cameraWidth: Int = 640,
-    val cameraHeight: Int = 480,
+    val cameraFps: Int = 5,
+    val cameraQuality: Int = 45,
+    val cameraWidth: Int = 480,
+    val cameraHeight: Int = 360,
     val cameraTorch: Boolean = false,
     val cameraFrame: Bitmap? = null,
     val cameraLastFrameLabel: String = "Never",

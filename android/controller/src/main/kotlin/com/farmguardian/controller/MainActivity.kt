@@ -9,6 +9,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -53,7 +54,6 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LinkOff
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Logout
-import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.NotificationImportant
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.PauseCircle
@@ -152,6 +152,7 @@ private fun ControllerScreen(viewModel: ControllerViewModel = viewModel()) {
     val durationSeconds = state.durationSeconds
     val remainingSeconds = state.remainingSeconds
     var showCameraScreen by remember { mutableStateOf(false) }
+    var selectedNav by remember { mutableStateOf("Nodes") }
     val playbackProgress = when {
         durationSeconds != null && remainingSeconds != null && durationSeconds > 0 ->
             ((durationSeconds - remainingSeconds).toFloat() / durationSeconds).coerceIn(0f, 1f)
@@ -358,7 +359,13 @@ private fun ControllerScreen(viewModel: ControllerViewModel = viewModel()) {
             onClick = { viewModel.play("loud_buzzer") },
         )
 
-        BottomNavigationBar(modifier = Modifier.align(Alignment.BottomCenter), primary = primary, gold = gold)
+        BottomNavigationBar(
+            modifier = Modifier.align(Alignment.BottomCenter),
+            selected = selectedNav,
+            primary = primary,
+            gold = gold,
+            onSelect = { selectedNav = it },
+        )
     }
 }
 
@@ -672,7 +679,7 @@ private fun SoundCommandButton(
 ) {
     Button(
         onClick = onClick,
-        modifier = modifier.height(86.dp),
+        modifier = modifier.height(68.dp),
         shape = RoundedCornerShape(8.dp),
         colors = ButtonDefaults.buttonColors(
             containerColor = if (active) gold else Color(0xFFE1E3E4),
@@ -682,8 +689,8 @@ private fun SoundCommandButton(
         elevation = ButtonDefaults.buttonElevation(defaultElevation = if (active) 4.dp else 1.dp),
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-            Icon(icon, contentDescription = null, modifier = Modifier.size(26.dp))
-            Text(label, fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 8.dp))
+            Icon(icon, contentDescription = null, modifier = Modifier.size(22.dp))
+            Text(label, fontSize = 10.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 5.dp))
         }
     }
 }
@@ -1048,7 +1055,7 @@ private fun CameraStreamCard(
                 ) {
                     CameraOverlayButton(Icons.Default.Screenshot, "Snapshot", onStart)
                     CameraOverlayButton(Icons.Default.Videocam, "Start or stop", if (state.cameraEnabled) onStop else onStart)
-                    CameraOverlayButton(Icons.Default.Mic, "Torch", onTorch, active = state.cameraTorch, primary = primary)
+                    CameraOverlayButton(Icons.Default.FlashlightOn, "Torch", onTorch, active = state.cameraTorch, primary = primary)
                     CameraOverlayButton(Icons.Default.Cameraswitch, "Switch lens", onClick = {
                         onLens(if (state.cameraLensFacing == CameraLensFacing.BACK) CameraLensFacing.FRONT else CameraLensFacing.BACK)
                     })
@@ -1137,7 +1144,7 @@ private fun DeterrentTile(
 ) {
     Button(
         onClick = onClick,
-        modifier = modifier.height(142.dp),
+        modifier = modifier.height(110.dp),
         shape = RoundedCornerShape(18.dp),
         colors = ButtonDefaults.buttonColors(containerColor = background, contentColor = textColor),
         contentPadding = PaddingValues(8.dp),
@@ -1145,13 +1152,13 @@ private fun DeterrentTile(
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
             Box(
                 modifier = Modifier
-                    .size(54.dp)
+                    .size(44.dp)
                     .background(iconBackground, CircleShape),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(30.dp))
+                Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(25.dp))
             }
-            Text(label, modifier = Modifier.padding(top = 16.dp), fontSize = 18.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center)
+            Text(label, modifier = Modifier.padding(top = 10.dp), fontSize = 15.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center)
         }
     }
 }
@@ -1256,7 +1263,13 @@ private fun EmergencyButton(modifier: Modifier, onClick: () -> Unit) {
 }
 
 @Composable
-private fun BottomNavigationBar(modifier: Modifier, primary: Color, gold: Color) {
+private fun BottomNavigationBar(
+    modifier: Modifier,
+    selected: String,
+    primary: Color,
+    gold: Color,
+    onSelect: (String) -> Unit,
+) {
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -1266,19 +1279,27 @@ private fun BottomNavigationBar(modifier: Modifier, primary: Color, gold: Color)
         horizontalArrangement = Arrangement.SpaceAround,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        BottomNavItem(Icons.Default.Hub, "Nodes", true, primary, gold)
-        BottomNavItem(Icons.Default.Notifications, "Alerts", false, primary, gold)
-        BottomNavItem(Icons.Default.AccessTime, "Schedules", false, primary, gold)
-        BottomNavItem(Icons.Default.Settings, "Settings", false, primary, gold)
+        BottomNavItem(Icons.Default.Hub, "Nodes", selected == "Nodes", primary, gold) { onSelect("Nodes") }
+        BottomNavItem(Icons.Default.Notifications, "Alerts", selected == "Alerts", primary, gold) { onSelect("Alerts") }
+        BottomNavItem(Icons.Default.AccessTime, "Schedules", selected == "Schedules", primary, gold) { onSelect("Schedules") }
+        BottomNavItem(Icons.Default.Settings, "Settings", selected == "Settings", primary, gold) { onSelect("Settings") }
     }
 }
 
 @Composable
-private fun BottomNavItem(icon: ImageVector, label: String, selected: Boolean, primary: Color, gold: Color) {
+private fun BottomNavItem(
+    icon: ImageVector,
+    label: String,
+    selected: Boolean,
+    primary: Color,
+    gold: Color,
+    onClick: () -> Unit,
+) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
             .background(if (selected) gold else Color.Transparent, RoundedCornerShape(999.dp))
+            .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 5.dp),
     ) {
         Icon(icon, contentDescription = null, tint = if (selected) primary else Color.Black, modifier = Modifier.size(20.dp))
