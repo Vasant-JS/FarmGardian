@@ -321,7 +321,7 @@ private fun ControllerScreen(viewModel: ControllerViewModel = viewModel()) {
 
                 ActivityLog(activity = state.activity.takeLast(6), primary = primary, gold = gold, outline = outline, muted = muted)
 
-                Spacer(modifier = Modifier.height(74.dp))
+                Spacer(modifier = Modifier.height(128.dp))
             }
         }
 
@@ -1228,7 +1228,8 @@ private fun LoginScreen(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .widthIn(max = 460.dp),
+                .widthIn(max = 460.dp)
+                .padding(bottom = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(24.dp),
         ) {

@@ -370,7 +370,7 @@ private fun NodeDashboardScreen(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(74.dp))
+                Spacer(modifier = Modifier.height(128.dp))
             }
         }
 
@@ -574,7 +574,7 @@ private fun NodeLoginScreen(
                 .widthIn(max = 520.dp)
                 .align(Alignment.TopCenter)
                 .verticalScroll(rememberScrollState())
-                .padding(bottom = 112.dp),
+                .padding(bottom = 144.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Card(
