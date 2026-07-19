@@ -17,7 +17,6 @@ import android.graphics.YuvImage
 import android.media.AudioManager
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
-import android.util.Base64
 import android.util.Size
 import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
@@ -32,7 +31,6 @@ import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import com.farmguardian.shared.CameraConfigPayload
 import com.farmguardian.shared.CameraLensFacing
-import com.farmguardian.shared.CameraFramePayload
 import com.farmguardian.shared.AckPayload
 import com.farmguardian.shared.AckStatus
 import com.farmguardian.shared.ConnectionState
@@ -461,18 +459,7 @@ class NodeService : LifecycleService() {
             if (now - lastCameraFrameAt < cameraFrameIntervalMs) return
             lastCameraFrameAt = now
             val jpeg = image.toJpeg(cameraQuality)
-            val base64 = Base64.encodeToString(jpeg, Base64.NO_WRAP)
-            val sent = socket.send(
-                GuardianMessage(
-                    type = MessageType.CAMERA_FRAME,
-                    frame = CameraFramePayload(
-                        dataBase64 = base64,
-                        width = image.width,
-                        height = image.height,
-                        timestamp = now,
-                    ),
-                ),
-            )
+            val sent = socket.sendBinary(jpeg)
             if (!sent) NodeStatusStore.appendLog(this, "Camera", "Frame send failed")
         } finally {
             image.close()

@@ -16,6 +16,7 @@ import com.farmguardian.shared.GuardianSocketClient
 import com.farmguardian.shared.MessageType
 import com.farmguardian.shared.NodeSummary
 import com.farmguardian.shared.NodeStatusPayload
+import java.nio.ByteBuffer
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -53,6 +54,7 @@ class ControllerViewModel : ViewModel() {
             backendUrl = BuildConfig.BACKEND_WS_URL,
             onState = ::applyConnectionState,
             onMessage = ::handleMessage,
+            onBinaryMessage = ::handleBinaryFrame,
         ).also { it.start() }
     }
 
@@ -302,6 +304,25 @@ class ControllerViewModel : ViewModel() {
         }
         val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: run {
             log("Camera frame image invalid")
+            return
+        }
+        _state.update {
+            it.copy(
+                cameraFrame = bitmap,
+                cameraLastFrameLabel = timeFormat.format(Date()),
+            )
+        }
+    }
+
+    private fun handleBinaryFrame(bytes: ByteArray) {
+        if (bytes.size < 3) return
+        val nodeIdLength = ByteBuffer.wrap(bytes, 0, 2).short.toInt()
+        if (nodeIdLength <= 0 || bytes.size <= 2 + nodeIdLength) return
+        val nodeId = bytes.copyOfRange(2, 2 + nodeIdLength).decodeToString()
+        if (nodeId != state.value.selectedNodeId) return
+        val jpeg = bytes.copyOfRange(2 + nodeIdLength, bytes.size)
+        val bitmap = BitmapFactory.decodeByteArray(jpeg, 0, jpeg.size) ?: run {
+            log("Camera binary frame invalid")
             return
         }
         _state.update {

@@ -10,6 +10,7 @@ import io.ktor.server.websocket.webSocket
 import io.ktor.websocket.Frame
 import io.ktor.websocket.WebSocketSession
 import io.ktor.websocket.readText
+import java.nio.ByteBuffer
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.channels.consumeEach
 import kotlinx.serialization.Serializable
@@ -39,17 +40,22 @@ fun Application.farmGuardianBackend() {
             var registration: DeviceRegistration? = null
             try {
                 incoming.consumeEach { frame ->
-                    if (frame !is Frame.Text) return@consumeEach
-                    val envelope = runCatching { json.decodeFromString<GuardianMessage>(frame.readText()) }.getOrNull()
-                        ?: return@consumeEach
-
                     val currentRegistration = registration
-                    if (currentRegistration == null) {
-                        registration = sessions.tryRegister(envelope, this)
-                        return@consumeEach
+                    when (frame) {
+                        is Frame.Text -> {
+                            val envelope = runCatching { json.decodeFromString<GuardianMessage>(frame.readText()) }.getOrNull()
+                                ?: return@consumeEach
+                            if (currentRegistration == null) {
+                                registration = sessions.tryRegister(envelope, this)
+                                return@consumeEach
+                            }
+                            sessions.route(currentRegistration, envelope, this)
+                        }
+                        is Frame.Binary -> {
+                            if (currentRegistration != null) sessions.routeBinary(currentRegistration, frame.data)
+                        }
+                        else -> Unit
                     }
-
-                    sessions.route(currentRegistration, envelope, this)
                 }
             } finally {
                 registration?.let { sessions.unregister(it, this) }
@@ -134,6 +140,11 @@ private class FarmSessions {
         }
     }
 
+    suspend fun routeBinary(from: DeviceRegistration, bytes: ByteArray) {
+        if (from.role != DeviceRole.NODE || bytes.isEmpty()) return
+        controllers[from.username]?.forEach { it.sendBinaryFrame(from.nodeId, bytes) }
+    }
+
     private suspend fun routeControllerCommand(username: String, envelope: GuardianMessage) {
         val nodeId = envelope.targetNodeId
         if (nodeId.isNullOrBlank()) {
@@ -202,6 +213,16 @@ private class FarmSessions {
 
 private suspend fun WebSocketSession.sendMessage(message: GuardianMessage) {
     send(Frame.Text(json.encodeToString(GuardianMessage.serializer(), message)))
+}
+
+private suspend fun WebSocketSession.sendBinaryFrame(nodeId: String, bytes: ByteArray) {
+    val nodeIdBytes = nodeId.encodeToByteArray()
+    val header = ByteBuffer.allocate(2 + nodeIdBytes.size + bytes.size)
+        .putShort(nodeIdBytes.size.toShort())
+        .put(nodeIdBytes)
+        .put(bytes)
+        .array()
+    send(Frame.Binary(true, header))
 }
 
 private suspend fun WebSocketSession.sendStatus(nodeId: String, status: NodeStatusPayload) {

@@ -10,6 +10,8 @@ import okhttp3.Request
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
+import okio.ByteString
+import okio.ByteString.Companion.toByteString
 
 class GuardianSocketClient(
     private val scope: CoroutineScope,
@@ -21,6 +23,7 @@ class GuardianSocketClient(
     private val nodeId: String = GuardianConfig.DEFAULT_NODE_ID,
     private val onState: (ConnectionState) -> Unit,
     private val onMessage: (GuardianMessage) -> Unit,
+    private val onBinaryMessage: (ByteArray) -> Unit = {},
 ) {
     private val json = Json {
         ignoreUnknownKeys = true
@@ -48,6 +51,9 @@ class GuardianSocketClient(
 
     fun send(message: GuardianMessage): Boolean =
         socket?.send(json.encodeToString(GuardianMessage.serializer(), message)) == true
+
+    fun sendBinary(bytes: ByteArray): Boolean =
+        socket?.send(bytes.toByteString()) == true
 
     private fun scheduleConnect(delayMs: Long = reconnectDelayMs) {
         if (manuallyStopped || reconnectJob?.isActive == true) return
@@ -82,6 +88,10 @@ class GuardianSocketClient(
             override fun onMessage(webSocket: WebSocket, text: String) {
                 val message = runCatching { json.decodeFromString<GuardianMessage>(text) }.getOrNull() ?: return
                 onMessage(message)
+            }
+
+            override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
+                onBinaryMessage(bytes.toByteArray())
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
