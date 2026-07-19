@@ -14,10 +14,16 @@ import android.content.pm.PackageManager
 import android.graphics.ImageFormat
 import android.graphics.Rect
 import android.graphics.YuvImage
+import android.hardware.camera2.CameraCharacteristics
+import android.hardware.camera2.CameraManager
 import android.media.AudioManager
+import android.media.AudioFormat
+import android.media.AudioRecord
+import android.media.MediaRecorder
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.util.Size
+import androidx.camera.camera2.interop.Camera2CameraInfo
 import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
@@ -30,6 +36,9 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import com.farmguardian.shared.CameraConfigPayload
+import com.farmguardian.shared.AudioConfigPayload
+import com.farmguardian.shared.BinaryFrameKind
+import com.farmguardian.shared.CameraDevicePayload
 import com.farmguardian.shared.CameraLensFacing
 import com.farmguardian.shared.AckPayload
 import com.farmguardian.shared.AckStatus
@@ -60,6 +69,7 @@ class NodeService : LifecycleService() {
     private var camera: Camera? = null
     private var cameraExecutor: ExecutorService? = null
     private var cameraActive = false
+    private var activeCameraId: String? = null
     private var cameraQuality = 60
     private var cameraFrameIntervalMs = 500L
     @Volatile private var lastCameraFrameAt = 0L
@@ -75,6 +85,9 @@ class NodeService : LifecycleService() {
     private var autoIntervalSeconds = 0
     private var autoLoops = 0
     private var autoVolume = 80
+    private var micJob: Job? = null
+    private var micActive = false
+    private var micSampleRate = 16_000
 
     override fun onCreate() {
         super.onCreate()
@@ -120,6 +133,7 @@ class NodeService : LifecycleService() {
         NodeStatusStore.appendLog(this, "Service", "Stopped")
         healthJob?.cancel()
         autoPlayJob?.cancel()
+        stopMicStream()
         stopCameraStream()
         cameraExecutor?.shutdown()
         socket.stop()
@@ -137,6 +151,7 @@ class NodeService : LifecycleService() {
                 MessageType.STOP -> stop(message.id)
                 MessageType.AUTO_PLAY_CONFIG -> configureAutoPlay(message)
                 MessageType.CAMERA_CONFIG -> configureCamera(message)
+                MessageType.AUDIO_CONFIG -> configureAudio(message)
                 MessageType.DISCONNECT_NODE -> disconnectFromController()
                 else -> Unit
             }
@@ -146,6 +161,7 @@ class NodeService : LifecycleService() {
     private fun disconnectFromController() {
         NodeStatusStore.appendLog(this, "Disconnected", "Requested by controller")
         NodeStatusStore.clearLogin(this)
+        stopMicStream()
         stopCameraStream()
         socket.stop()
         stopSelf()
@@ -354,6 +370,9 @@ class NodeService : LifecycleService() {
             remainingSeconds = remainingSeconds(),
             phoneTemperatureCelsius = battery.temperatureCelsius,
             cameraActive = cameraActive,
+            micActive = micActive,
+            activeCameraId = activeCameraId,
+            cameras = availableCameras(),
             lastSeen = System.currentTimeMillis(),
         )
     }
@@ -383,11 +402,33 @@ class NodeService : LifecycleService() {
         acknowledge(message.id, AckStatus.SUCCESS)
     }
 
+    private fun configureAudio(message: GuardianMessage) {
+        val config = message.audio
+        if (config == null) {
+            acknowledge(message.id, AckStatus.FAILED, "MissingAudioConfig")
+            return
+        }
+        if (!config.enabled) {
+            stopMicStream()
+            NodeStatusStore.appendLog(this, "Mic", "Stopped")
+            acknowledge(message.id, AckStatus.SUCCESS)
+            sendStatus(MessageType.STATUS)
+            return
+        }
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            acknowledge(message.id, AckStatus.FAILED, "MicPermissionNeeded")
+            NodeStatusStore.appendLog(this, "Mic", "Permission needed")
+            return
+        }
+        startMicStream(config)
+        acknowledge(message.id, AckStatus.SUCCESS)
+    }
+
     @SuppressLint("MissingPermission")
     private fun startCameraStream(config: CameraConfigPayload) {
         stopCameraStream()
         cameraQuality = config.quality.coerceIn(20, 95)
-        cameraFrameIntervalMs = 1000L / config.fps.coerceIn(1, 10)
+        cameraFrameIntervalMs = 1000L / config.fps.coerceIn(1, 15)
         cameraExecutor = Executors.newSingleThreadExecutor()
 
         val providerFuture = ProcessCameraProvider.getInstance(this)
@@ -396,7 +437,7 @@ class NodeService : LifecycleService() {
                 runCatching {
                     val provider = providerFuture.get()
                     cameraProvider = provider
-                    val selector = selectCamera(provider, config.lensFacing)
+                    val selector = selectCamera(provider, config.cameraId, config.lensFacing)
                     val analysis = ImageAnalysis.Builder()
                         .setTargetResolution(Size(config.width, config.height))
                         .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
@@ -409,10 +450,12 @@ class NodeService : LifecycleService() {
                     camera = provider.bindToLifecycle(this, selector, analysis)
                     camera?.cameraControl?.enableTorch(config.torch)
                     cameraActive = true
-                    NodeStatusStore.appendLog(this, "Camera", "Started ${config.width}x${config.height} ${config.fps}fps ${config.lensFacing}")
+                    activeCameraId = resolveActiveCameraId(provider, selector) ?: config.cameraId
+                    NodeStatusStore.appendLog(this, "Camera", "Started ${config.width}x${config.height} ${config.fps}fps ${activeCameraId ?: config.lensFacing}")
                     sendStatus(MessageType.STATUS)
                 }.onFailure {
                     cameraActive = false
+                    activeCameraId = null
                     NodeStatusStore.appendLog(this, "Camera", "Failed: ${it.message ?: "Unavailable"}")
                     sendStatus(MessageType.STATUS)
                 }
@@ -421,7 +464,18 @@ class NodeService : LifecycleService() {
         )
     }
 
-    private fun selectCamera(provider: ProcessCameraProvider, requested: CameraLensFacing): CameraSelector {
+    private fun selectCamera(provider: ProcessCameraProvider, cameraId: String?, requested: CameraLensFacing): CameraSelector {
+        if (!cameraId.isNullOrBlank()) {
+            val selector = CameraSelector.Builder()
+                .addCameraFilter { cameraInfos ->
+                    cameraInfos.filter { info ->
+                        runCatching { Camera2CameraInfo.from(info).cameraId == cameraId }.getOrDefault(false)
+                    }
+                }
+                .build()
+            if (provider.hasCamera(selector)) return selector
+        }
+
         val requestedLens = if (requested == CameraLensFacing.FRONT) {
             CameraSelector.LENS_FACING_FRONT
         } else {
@@ -444,11 +498,19 @@ class NodeService : LifecycleService() {
         throw IllegalStateException("No camera available")
     }
 
+    private fun resolveActiveCameraId(provider: ProcessCameraProvider, selector: CameraSelector): String? =
+        runCatching {
+            selector.filter(provider.availableCameraInfos)
+                .firstOrNull()
+                ?.let { Camera2CameraInfo.from(it).cameraId }
+        }.getOrNull()
+
     private fun stopCameraStream() {
         cameraProvider?.unbindAll()
         cameraProvider = null
         camera = null
         cameraActive = false
+        activeCameraId = null
         cameraExecutor?.shutdown()
         cameraExecutor = null
     }
@@ -459,10 +521,86 @@ class NodeService : LifecycleService() {
             if (now - lastCameraFrameAt < cameraFrameIntervalMs) return
             lastCameraFrameAt = now
             val jpeg = image.toJpeg(cameraQuality)
-            val sent = socket.sendBinary(jpeg)
+            val sent = socket.sendBinary(byteArrayOf(BinaryFrameKind.CAMERA_JPEG) + jpeg)
             if (!sent) NodeStatusStore.appendLog(this, "Camera", "Frame send failed")
         } finally {
             image.close()
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun startMicStream(config: AudioConfigPayload) {
+        stopMicStream()
+        micSampleRate = config.sampleRate.coerceIn(8_000, 24_000)
+        val minBuffer = AudioRecord.getMinBufferSize(
+            micSampleRate,
+            AudioFormat.CHANNEL_IN_MONO,
+            AudioFormat.ENCODING_PCM_16BIT,
+        )
+        if (minBuffer <= 0) {
+            NodeStatusStore.appendLog(this, "Mic", "Failed: buffer unavailable")
+            return
+        }
+        micActive = true
+        micJob = serviceScope.launch(Dispatchers.IO) {
+            val record = AudioRecord(
+                MediaRecorder.AudioSource.MIC,
+                micSampleRate,
+                AudioFormat.CHANNEL_IN_MONO,
+                AudioFormat.ENCODING_PCM_16BIT,
+                minBuffer * 2,
+            )
+            runCatching {
+                val buffer = ByteArray(minBuffer)
+                record.startRecording()
+                NodeStatusStore.appendLog(this@NodeService, "Mic", "Started ${micSampleRate}Hz")
+                sendStatus(MessageType.STATUS)
+                while (micActive) {
+                    val read = record.read(buffer, 0, buffer.size)
+                    if (read > 0) {
+                        socket.sendBinary(byteArrayOf(BinaryFrameKind.MIC_PCM_16) + buffer.copyOf(read))
+                    }
+                }
+            }.onFailure {
+                NodeStatusStore.appendLog(this@NodeService, "Mic", "Failed: ${it.message ?: "Unavailable"}")
+            }
+            runCatching { record.stop() }
+            record.release()
+            micActive = false
+            sendStatus(MessageType.STATUS)
+        }
+    }
+
+    private fun stopMicStream() {
+        micActive = false
+        micJob?.cancel()
+        micJob = null
+    }
+
+    private fun availableCameras(): List<CameraDevicePayload> {
+        val manager = getSystemService(CameraManager::class.java)
+        return manager.cameraIdList.mapNotNull { id ->
+            runCatching {
+                val characteristics = manager.getCameraCharacteristics(id)
+                val facingValue = characteristics.get(CameraCharacteristics.LENS_FACING)
+                val facing = when (facingValue) {
+                    CameraCharacteristics.LENS_FACING_FRONT -> CameraLensFacing.FRONT
+                    CameraCharacteristics.LENS_FACING_BACK -> CameraLensFacing.BACK
+                    else -> null
+                }
+                val external = facingValue == CameraCharacteristics.LENS_FACING_EXTERNAL
+                CameraDevicePayload(
+                    id = id,
+                    label = when {
+                        external -> "USB Camera $id"
+                        facing == CameraLensFacing.FRONT -> "Front Camera $id"
+                        facing == CameraLensFacing.BACK -> "Back Camera $id"
+                        else -> "Camera $id"
+                    },
+                    lensFacing = facing,
+                    external = external,
+                )
+            }.getOrNull()
         }
     }
 

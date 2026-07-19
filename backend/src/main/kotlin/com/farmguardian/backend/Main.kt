@@ -263,6 +263,7 @@ data class GuardianMessage(
     val nodeId: String? = null,
     val friendlyName: String? = null,
     val camera: CameraConfigPayload? = null,
+    val audio: AudioConfigPayload? = null,
     val frame: CameraFramePayload? = null,
     val sound: String? = null,
     val volume: Int? = null,
@@ -306,6 +307,9 @@ data class NodeStatusPayload(
     val remainingSeconds: Int? = null,
     val phoneTemperatureCelsius: Float? = null,
     val cameraActive: Boolean = false,
+    val micActive: Boolean = false,
+    val activeCameraId: String? = null,
+    val cameras: List<CameraDevicePayload> = emptyList(),
     val lastSeen: Long = System.currentTimeMillis(),
 )
 
@@ -313,11 +317,26 @@ data class NodeStatusPayload(
 data class CameraConfigPayload(
     val enabled: Boolean,
     val lensFacing: String = "BACK",
+    val cameraId: String? = null,
     val fps: Int = 2,
     val quality: Int = 60,
     val width: Int = 640,
     val height: Int = 480,
     val torch: Boolean = false,
+)
+
+@Serializable
+data class AudioConfigPayload(
+    val enabled: Boolean,
+    val sampleRate: Int = 16_000,
+)
+
+@Serializable
+data class CameraDevicePayload(
+    val id: String,
+    val label: String,
+    val lensFacing: String? = null,
+    val external: Boolean = false,
 )
 
 @Serializable

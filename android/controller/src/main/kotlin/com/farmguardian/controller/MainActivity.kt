@@ -54,6 +54,8 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LinkOff
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Logout
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.NotificationImportant
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.PauseCircle
@@ -115,6 +117,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.farmguardian.shared.CameraLensFacing
+import com.farmguardian.shared.CameraDevicePayload
 import com.farmguardian.shared.DefaultSoundOptions
 import com.farmguardian.shared.NodeSummary
 
@@ -192,6 +195,8 @@ private fun ControllerScreen(viewModel: ControllerViewModel = viewModel()) {
             onQualityDown = { viewModel.setCameraQuality(state.cameraQuality - 10) },
             onQualityUp = { viewModel.setCameraQuality(state.cameraQuality + 10) },
             onResolution = viewModel::setCameraResolution,
+            onCameraSource = viewModel::setCameraSource,
+            onMicToggle = viewModel::toggleMic,
             onPlay = viewModel::play,
         )
         return
@@ -423,6 +428,8 @@ private fun CameraRouteScreen(
     onQualityDown: () -> Unit,
     onQualityUp: () -> Unit,
     onResolution: (Int, Int) -> Unit,
+    onCameraSource: (CameraDevicePayload?) -> Unit,
+    onMicToggle: () -> Unit,
     onPlay: (String) -> Unit,
 ) {
     Box(
@@ -457,6 +464,8 @@ private fun CameraRouteScreen(
                 onQualityDown = onQualityDown,
                 onQualityUp = onQualityUp,
                 onResolution = onResolution,
+                onCameraSource = onCameraSource,
+                onMicToggle = onMicToggle,
                 onPlay = onPlay,
             )
             Spacer(modifier = Modifier.height(28.dp))
@@ -823,9 +832,14 @@ private fun CameraPanel(
     onQualityDown: () -> Unit,
     onQualityUp: () -> Unit,
     onResolution: (Int, Int) -> Unit,
+    onCameraSource: (CameraDevicePayload?) -> Unit,
+    onMicToggle: () -> Unit,
     onPlay: (String) -> Unit,
 ) {
     val selectedNode = nodes.firstOrNull { it.nodeId == selectedNodeId }
+    var cameraMenuOpen by remember { mutableStateOf(false) }
+    val selectedCamera = state.availableCameras.firstOrNull { it.id == state.cameraId }
+        ?: state.availableCameras.firstOrNull()
 
     Column(verticalArrangement = Arrangement.spacedBy(22.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -862,6 +876,7 @@ private fun CameraPanel(
             onStop = onStop,
             onTorch = onTorch,
             onLens = onLens,
+            onMicToggle = onMicToggle,
         )
 
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -953,14 +968,58 @@ private fun CameraPanel(
         DashboardCard(outline = outline) {
             SectionTitle(icon = Icons.Default.Settings, title = "Stream Controls", color = primary)
             Text("Last frame: ${state.cameraLastFrameLabel}", color = muted, fontSize = 12.sp)
+            Text("Camera Source", color = muted, fontSize = 12.sp)
+            Box(modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(
+                    onClick = { cameraMenuOpen = true },
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Icon(Icons.Default.Videocam, contentDescription = null, modifier = Modifier.size(17.dp))
+                    Text(
+                        selectedCamera?.label ?: "Auto camera",
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(start = 8.dp),
+                        textAlign = TextAlign.Start,
+                    )
+                }
+                DropdownMenu(
+                    expanded = cameraMenuOpen,
+                    onDismissRequest = { cameraMenuOpen = false },
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Auto camera") },
+                        onClick = {
+                            onCameraSource(null)
+                            cameraMenuOpen = false
+                        },
+                    )
+                    state.availableCameras.forEach { camera ->
+                        DropdownMenuItem(
+                            text = { Text(if (camera.external) "${camera.label} (USB)" else camera.label) },
+                            onClick = {
+                                onCameraSource(camera)
+                                cameraMenuOpen = false
+                            },
+                        )
+                    }
+                }
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                 Button(onClick = onStart, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = primary)) { Text("Start") }
                 OutlinedButton(onClick = onStop, modifier = Modifier.weight(1f)) { Text("Stop") }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+            ) {
                 ControlChip("Back", state.cameraLensFacing == CameraLensFacing.BACK, primary) { onLens(CameraLensFacing.BACK) }
                 ControlChip("Front", state.cameraLensFacing == CameraLensFacing.FRONT, primary) { onLens(CameraLensFacing.FRONT) }
                 ControlChip("Torch", state.cameraTorch, primary, icon = Icons.Default.FlashlightOn, onClick = onTorch)
+                ControlChip("Mic", state.micEnabled, primary, icon = if (state.micEnabled) Icons.Default.Mic else Icons.Default.MicOff, onClick = onMicToggle)
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text("FPS ${state.cameraFps}", color = muted, modifier = Modifier.weight(1f))
@@ -989,6 +1048,7 @@ private fun CameraStreamCard(
     onStart: () -> Unit,
     onStop: () -> Unit,
     onTorch: () -> Unit,
+    onMicToggle: () -> Unit,
     onLens: (CameraLensFacing) -> Unit,
 ) {
     Box(
@@ -1034,6 +1094,7 @@ private fun CameraStreamCard(
                 Column(horizontalAlignment = Alignment.End) {
                     Text("Last: ${state.cameraLastFrameLabel}", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                     Text("FPS: ${state.cameraFps} | Q${state.cameraQuality}", color = Color.White.copy(alpha = 0.82f), fontSize = 12.sp)
+                    Text(if (state.micEnabled) "Mic: On" else "Mic: Off", color = Color.White.copy(alpha = 0.82f), fontSize = 12.sp)
                 }
             }
             Row(verticalAlignment = Alignment.Bottom) {
@@ -1055,6 +1116,7 @@ private fun CameraStreamCard(
                 ) {
                     CameraOverlayButton(Icons.Default.Screenshot, "Snapshot", onStart)
                     CameraOverlayButton(Icons.Default.Videocam, "Start or stop", if (state.cameraEnabled) onStop else onStart)
+                    CameraOverlayButton(if (state.micEnabled) Icons.Default.Mic else Icons.Default.MicOff, "Node mic", onMicToggle, active = state.micEnabled, primary = primary)
                     CameraOverlayButton(Icons.Default.FlashlightOn, "Torch", onTorch, active = state.cameraTorch, primary = primary)
                     CameraOverlayButton(Icons.Default.Cameraswitch, "Switch lens", onClick = {
                         onLens(if (state.cameraLensFacing == CameraLensFacing.BACK) CameraLensFacing.FRONT else CameraLensFacing.BACK)

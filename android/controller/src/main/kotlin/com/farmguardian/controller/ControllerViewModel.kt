@@ -2,11 +2,17 @@ package com.farmguardian.controller
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.media.AudioAttributes
+import android.media.AudioFormat
+import android.media.AudioTrack
 import android.util.Base64
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.farmguardian.shared.AckStatus
+import com.farmguardian.shared.AudioConfigPayload
+import com.farmguardian.shared.BinaryFrameKind
 import com.farmguardian.shared.CameraConfigPayload
+import com.farmguardian.shared.CameraDevicePayload
 import com.farmguardian.shared.CameraLensFacing
 import com.farmguardian.shared.ConnectionState
 import com.farmguardian.shared.DefaultSoundOptions
@@ -27,6 +33,7 @@ import kotlinx.coroutines.flow.update
 class ControllerViewModel : ViewModel() {
     private val timeFormat = SimpleDateFormat("HH:mm:ss", Locale.US)
     private var socket: GuardianSocketClient? = null
+    private var micTrack: AudioTrack? = null
 
     private val _state = MutableStateFlow(ControllerState(connecting = true))
     val state: StateFlow<ControllerState> = _state
@@ -61,6 +68,7 @@ class ControllerViewModel : ViewModel() {
     fun logout() {
         socket?.stop()
         socket = null
+        releaseMicTrack()
         _state.update { ControllerState(activity = it.activity.takeLast(20)) }
     }
 
@@ -105,11 +113,20 @@ class ControllerViewModel : ViewModel() {
     }
 
     fun setCameraLens(lensFacing: CameraLensFacing) {
-        updateCameraConfig("Camera lens changed") { it.copy(cameraLensFacing = lensFacing) }
+        updateCameraConfig("Camera lens changed") { it.copy(cameraLensFacing = lensFacing, cameraId = null) }
+    }
+
+    fun setCameraSource(camera: CameraDevicePayload?) {
+        updateCameraConfig("Camera source changed") {
+            it.copy(
+                cameraId = camera?.id,
+                cameraLensFacing = camera?.lensFacing ?: it.cameraLensFacing,
+            )
+        }
     }
 
     fun setCameraFps(fps: Int) {
-        updateCameraConfig("Camera FPS changed") { it.copy(cameraFps = fps.coerceIn(1, 8)) }
+        updateCameraConfig("Camera FPS changed") { it.copy(cameraFps = fps.coerceIn(1, 15)) }
     }
 
     fun setCameraQuality(quality: Int) {
@@ -129,6 +146,24 @@ class ControllerViewModel : ViewModel() {
         val config = state.value.copy(cameraEnabled = enabled)
         _state.update { config }
         sendCameraConfig(config, targetNodeId, if (enabled) "Camera stream requested" else "Camera stream stopped")
+    }
+
+    fun toggleMic() {
+        setMicEnabled(!state.value.micEnabled)
+    }
+
+    fun setMicEnabled(enabled: Boolean) {
+        val targetNodeId = selectedNodeIdOrLog() ?: return
+        if (!enabled) releaseMicTrack()
+        _state.update { it.copy(micEnabled = enabled) }
+        send(
+            GuardianMessage(
+                type = MessageType.AUDIO_CONFIG,
+                targetNodeId = targetNodeId,
+                audio = AudioConfigPayload(enabled = enabled, sampleRate = state.value.micSampleRate),
+            ),
+            if (enabled) "Node mic requested" else "Node mic stopped",
+        )
     }
 
     fun setVolume(volume: Int) {
@@ -183,6 +218,7 @@ class ControllerViewModel : ViewModel() {
 
     override fun onCleared() {
         socket?.stop()
+        releaseMicTrack()
         super.onCleared()
     }
 
@@ -217,6 +253,7 @@ class ControllerViewModel : ViewModel() {
                     quality = config.cameraQuality,
                     width = config.cameraWidth,
                     height = config.cameraHeight,
+                    cameraId = config.cameraId,
                     torch = config.cameraTorch,
                 ),
             ),
@@ -271,6 +308,7 @@ class ControllerViewModel : ViewModel() {
     }
 
     private fun applyStatus(status: NodeStatusPayload) {
+        if (!status.micActive) releaseMicTrack()
         _state.update {
             it.copy(
                 nodeStatusLabel = if (status.online) "Online" else "Offline",
@@ -288,6 +326,10 @@ class ControllerViewModel : ViewModel() {
                 durationSeconds = status.durationSeconds,
                 remainingSeconds = status.remainingSeconds,
                 temperatureLabel = status.phoneTemperatureCelsius?.let { temp -> "%.1f C".format(temp) } ?: it.temperatureLabel,
+                cameraEnabled = status.cameraActive,
+                micEnabled = status.micActive,
+                cameraId = status.activeCameraId ?: it.cameraId,
+                availableCameras = status.cameras,
                 lastSeenLabel = timeFormat.format(Date(status.lastSeen)),
             )
         }
@@ -320,7 +362,17 @@ class ControllerViewModel : ViewModel() {
         if (nodeIdLength <= 0 || bytes.size <= 2 + nodeIdLength) return
         val nodeId = bytes.copyOfRange(2, 2 + nodeIdLength).decodeToString()
         if (nodeId != state.value.selectedNodeId) return
-        val jpeg = bytes.copyOfRange(2 + nodeIdLength, bytes.size)
+        val kindOffset = 2 + nodeIdLength
+        val kind = bytes[kindOffset]
+        val payload = bytes.copyOfRange(kindOffset + 1, bytes.size)
+        when (kind) {
+            BinaryFrameKind.CAMERA_JPEG -> applyCameraBinaryFrame(payload)
+            BinaryFrameKind.MIC_PCM_16 -> playMicPcm(payload)
+            else -> applyCameraBinaryFrame(bytes.copyOfRange(2 + nodeIdLength, bytes.size))
+        }
+    }
+
+    private fun applyCameraBinaryFrame(jpeg: ByteArray) {
         val bitmap = BitmapFactory.decodeByteArray(jpeg, 0, jpeg.size) ?: run {
             log("Camera binary frame invalid")
             return
@@ -331,6 +383,48 @@ class ControllerViewModel : ViewModel() {
                 cameraLastFrameLabel = timeFormat.format(Date()),
             )
         }
+    }
+
+    private fun playMicPcm(bytes: ByteArray) {
+        if (!state.value.micEnabled || bytes.isEmpty()) return
+        val track = micTrack ?: createMicTrack().also { created ->
+            created.play()
+            micTrack = created
+        }
+        track.write(bytes, 0, bytes.size)
+    }
+
+    private fun createMicTrack(): AudioTrack {
+        val sampleRate = state.value.micSampleRate
+        val minBuffer = AudioTrack.getMinBufferSize(
+            sampleRate,
+            AudioFormat.CHANNEL_OUT_MONO,
+            AudioFormat.ENCODING_PCM_16BIT,
+        ).coerceAtLeast(sampleRate)
+        return AudioTrack.Builder()
+            .setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                    .build(),
+            )
+            .setAudioFormat(
+                AudioFormat.Builder()
+                    .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                    .setSampleRate(sampleRate)
+                    .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                    .build(),
+            )
+            .setBufferSizeInBytes(minBuffer * 4)
+            .setTransferMode(AudioTrack.MODE_STREAM)
+            .build()
+    }
+
+    private fun releaseMicTrack() {
+        micTrack?.pause()
+        micTrack?.flush()
+        micTrack?.release()
+        micTrack = null
     }
 
     private fun selectedNodeIdOrLog(): String? {
@@ -362,13 +456,17 @@ data class ControllerState(
     val selectedNodeId: String? = null,
     val cameraEnabled: Boolean = false,
     val cameraLensFacing: CameraLensFacing = CameraLensFacing.BACK,
-    val cameraFps: Int = 4,
-    val cameraQuality: Int = 35,
-    val cameraWidth: Int = 320,
-    val cameraHeight: Int = 240,
+    val cameraId: String? = null,
+    val availableCameras: List<CameraDevicePayload> = emptyList(),
+    val cameraFps: Int = 10,
+    val cameraQuality: Int = 40,
+    val cameraWidth: Int = 480,
+    val cameraHeight: Int = 360,
     val cameraTorch: Boolean = false,
     val cameraFrame: Bitmap? = null,
     val cameraLastFrameLabel: String = "Never",
+    val micEnabled: Boolean = false,
+    val micSampleRate: Int = 16_000,
     val volume: Int = 80,
     val loops: Int = 0,
     val defaultSoundId: String = DefaultSoundOptions.first().id,
