@@ -113,7 +113,10 @@ class NodeService : LifecycleService() {
         startHealthReporting()
     }
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        super.onStartCommand(intent, flags, startId)
+        return START_STICKY
+    }
 
     override fun onDestroy() {
         NodeStatusStore.appendLog(this, "Service", "Stopped")
@@ -459,7 +462,7 @@ class NodeService : LifecycleService() {
             lastCameraFrameAt = now
             val jpeg = image.toJpeg(cameraQuality)
             val base64 = Base64.encodeToString(jpeg, Base64.NO_WRAP)
-            socket.send(
+            val sent = socket.send(
                 GuardianMessage(
                     type = MessageType.CAMERA_FRAME,
                     frame = CameraFramePayload(
@@ -470,6 +473,7 @@ class NodeService : LifecycleService() {
                     ),
                 ),
             )
+            if (!sent) NodeStatusStore.appendLog(this, "Camera", "Frame send failed")
         } finally {
             image.close()
         }

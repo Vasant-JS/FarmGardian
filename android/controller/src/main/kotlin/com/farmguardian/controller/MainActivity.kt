@@ -844,7 +844,7 @@ private fun CameraPanel(
                     Text("${selectedNodeId ?: "Node-01"} - ${state.nodeStatusLabel}", color = muted, fontSize = 14.sp)
                 }
             }
-            IconButton(onClick = { onResolution(1280, 720) }) {
+            IconButton(onClick = { onResolution(640, 480) }) {
                 Icon(Icons.Default.Tune, contentDescription = "High quality stream", tint = Color.Black)
             }
             Image(
@@ -974,8 +974,8 @@ private fun CameraPanel(
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                 ControlChip("Low", state.cameraWidth == 320, primary, icon = Icons.Default.Cameraswitch) { onResolution(320, 240) }
-                ControlChip("Med", state.cameraWidth == 640, primary) { onResolution(640, 480) }
-                ControlChip("High", state.cameraWidth == 1280, primary) { onResolution(1280, 720) }
+                ControlChip("Med", state.cameraWidth == 480, primary) { onResolution(480, 360) }
+                ControlChip("High", state.cameraWidth == 640, primary) { onResolution(640, 480) }
             }
         }
     }

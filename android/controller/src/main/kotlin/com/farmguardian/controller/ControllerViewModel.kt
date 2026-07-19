@@ -296,8 +296,14 @@ class ControllerViewModel : ViewModel() {
     }
 
     private fun applyCameraFrame(dataBase64: String) {
-        val bytes = runCatching { Base64.decode(dataBase64, Base64.NO_WRAP) }.getOrNull() ?: return
-        val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return
+        val bytes = runCatching { Base64.decode(dataBase64, Base64.NO_WRAP) }.getOrNull() ?: run {
+            log("Camera frame decode failed")
+            return
+        }
+        val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: run {
+            log("Camera frame image invalid")
+            return
+        }
         _state.update {
             it.copy(
                 cameraFrame = bitmap,
@@ -335,10 +341,10 @@ data class ControllerState(
     val selectedNodeId: String? = null,
     val cameraEnabled: Boolean = false,
     val cameraLensFacing: CameraLensFacing = CameraLensFacing.BACK,
-    val cameraFps: Int = 5,
-    val cameraQuality: Int = 45,
-    val cameraWidth: Int = 480,
-    val cameraHeight: Int = 360,
+    val cameraFps: Int = 4,
+    val cameraQuality: Int = 35,
+    val cameraWidth: Int = 320,
+    val cameraHeight: Int = 240,
     val cameraTorch: Boolean = false,
     val cameraFrame: Bitmap? = null,
     val cameraLastFrameLabel: String = "Never",
