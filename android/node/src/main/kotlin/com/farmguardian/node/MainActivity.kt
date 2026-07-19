@@ -19,8 +19,10 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
@@ -182,6 +184,8 @@ private fun NodeDashboardScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .statusBarsPadding()
+            .navigationBarsPadding()
             .background(page),
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -566,6 +570,8 @@ private fun NodeLoginScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(page)
+            .statusBarsPadding()
+            .navigationBarsPadding()
             .padding(horizontal = 28.dp, vertical = 24.dp),
     ) {
         Column(

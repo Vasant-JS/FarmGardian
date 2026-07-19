@@ -23,6 +23,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.horizontalScroll
@@ -149,6 +151,7 @@ private fun ControllerScreen(viewModel: ControllerViewModel = viewModel()) {
     val onlineCount = state.nodes.count { it.online }
     val durationSeconds = state.durationSeconds
     val remainingSeconds = state.remainingSeconds
+    var showCameraScreen by remember { mutableStateOf(false) }
     val playbackProgress = when {
         durationSeconds != null && remainingSeconds != null && durationSeconds > 0 ->
             ((durationSeconds - remainingSeconds).toFloat() / durationSeconds).coerceIn(0f, 1f)
@@ -165,9 +168,39 @@ private fun ControllerScreen(viewModel: ControllerViewModel = viewModel()) {
         return
     }
 
+    if (showCameraScreen) {
+        CameraRouteScreen(
+            state = state,
+            nodes = state.nodes,
+            selectedNodeId = state.selectedNodeId,
+            primary = primary,
+            gold = gold,
+            outline = outline,
+            muted = muted,
+            onSelectNode = viewModel::selectNode,
+            onBack = {
+                viewModel.applyCameraConfig(false)
+                showCameraScreen = false
+            },
+            onStart = { viewModel.applyCameraConfig(true) },
+            onStop = { viewModel.applyCameraConfig(false) },
+            onLens = viewModel::setCameraLens,
+            onTorch = { viewModel.setCameraTorch(!state.cameraTorch) },
+            onFpsDown = { viewModel.setCameraFps(state.cameraFps - 1) },
+            onFpsUp = { viewModel.setCameraFps(state.cameraFps + 1) },
+            onQualityDown = { viewModel.setCameraQuality(state.cameraQuality - 10) },
+            onQualityUp = { viewModel.setCameraQuality(state.cameraQuality + 10) },
+            onResolution = viewModel::setCameraResolution,
+            onPlay = viewModel::play,
+        )
+        return
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .statusBarsPadding()
+            .navigationBarsPadding()
             .background(page),
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -221,26 +254,19 @@ private fun ControllerScreen(viewModel: ControllerViewModel = viewModel()) {
                     LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), color = gold)
                 }
 
-                CameraPanel(
-                    state = state,
-                    nodes = state.nodes,
-                    selectedNodeId = state.selectedNodeId,
-                    primary = primary,
-                    gold = gold,
-                    outline = outline,
-                    muted = muted,
-                    onSelectNode = viewModel::selectNode,
-                    onStart = { viewModel.applyCameraConfig(true) },
-                    onStop = { viewModel.applyCameraConfig(false) },
-                    onLens = viewModel::setCameraLens,
-                    onTorch = { viewModel.setCameraTorch(!state.cameraTorch) },
-                    onFpsDown = { viewModel.setCameraFps(state.cameraFps - 1) },
-                    onFpsUp = { viewModel.setCameraFps(state.cameraFps + 1) },
-                    onQualityDown = { viewModel.setCameraQuality(state.cameraQuality - 10) },
-                    onQualityUp = { viewModel.setCameraQuality(state.cameraQuality + 10) },
-                    onResolution = viewModel::setCameraResolution,
-                    onPlay = viewModel::play,
-                )
+                if (state.nodes.isNotEmpty()) {
+                    OpenCameraCard(
+                        selectedNodeName = selectedNode?.friendlyName ?: "Main Farm",
+                        selectedNodeId = state.selectedNodeId ?: "Node-01",
+                        status = state.nodeStatusLabel,
+                        primary = primary,
+                        outline = outline,
+                        onOpen = {
+                            showCameraScreen = true
+                            viewModel.applyCameraConfig(true)
+                        },
+                    )
+                }
 
                 SectionTitle(icon = Icons.Default.VolumeUp, title = "Quick Commands", color = primary)
                 DefaultSoundOptions.chunked(2).forEach { row ->
@@ -333,6 +359,101 @@ private fun ControllerScreen(viewModel: ControllerViewModel = viewModel()) {
         )
 
         BottomNavigationBar(modifier = Modifier.align(Alignment.BottomCenter), primary = primary, gold = gold)
+    }
+}
+
+@Composable
+private fun OpenCameraCard(
+    selectedNodeName: String,
+    selectedNodeId: String,
+    status: String,
+    primary: Color,
+    outline: Color,
+    onOpen: () -> Unit,
+) {
+    DashboardCard(outline = outline) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .background(primary, RoundedCornerShape(8.dp)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(Icons.Default.Videocam, contentDescription = null, tint = Color.White)
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Live Camera", color = primary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Text("$selectedNodeName - $selectedNodeId - $status", color = Color(0xFF414844), fontSize = 12.sp)
+            }
+            Button(
+                onClick = onOpen,
+                colors = ButtonDefaults.buttonColors(containerColor = primary, contentColor = Color.White),
+                shape = RoundedCornerShape(8.dp),
+            ) {
+                Text("Open")
+            }
+        }
+    }
+}
+
+@Composable
+private fun CameraRouteScreen(
+    state: ControllerState,
+    nodes: List<NodeSummary>,
+    selectedNodeId: String?,
+    primary: Color,
+    gold: Color,
+    outline: Color,
+    muted: Color,
+    onSelectNode: (String) -> Unit,
+    onBack: () -> Unit,
+    onStart: () -> Unit,
+    onStop: () -> Unit,
+    onLens: (CameraLensFacing) -> Unit,
+    onTorch: () -> Unit,
+    onFpsDown: () -> Unit,
+    onFpsUp: () -> Unit,
+    onQualityDown: () -> Unit,
+    onQualityUp: () -> Unit,
+    onResolution: (Int, Int) -> Unit,
+    onPlay: (String) -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .statusBarsPadding()
+            .navigationBarsPadding()
+            .background(Color(0xFFF8F9FA)),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 14.dp, vertical = 14.dp),
+        ) {
+            CameraPanel(
+                state = state,
+                nodes = nodes,
+                selectedNodeId = selectedNodeId,
+                primary = primary,
+                gold = gold,
+                outline = outline,
+                muted = muted,
+                onSelectNode = onSelectNode,
+                onBack = onBack,
+                onStart = onStart,
+                onStop = onStop,
+                onLens = onLens,
+                onTorch = onTorch,
+                onFpsDown = onFpsDown,
+                onFpsUp = onFpsUp,
+                onQualityDown = onQualityDown,
+                onQualityUp = onQualityUp,
+                onResolution = onResolution,
+                onPlay = onPlay,
+            )
+            Spacer(modifier = Modifier.height(28.dp))
+        }
     }
 }
 
@@ -685,6 +806,7 @@ private fun CameraPanel(
     outline: Color,
     muted: Color,
     onSelectNode: (String) -> Unit,
+    onBack: () -> Unit,
     onStart: () -> Unit,
     onStop: () -> Unit,
     onLens: (CameraLensFacing) -> Unit,
@@ -700,7 +822,7 @@ private fun CameraPanel(
 
     Column(verticalArrangement = Arrangement.spacedBy(22.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onStop) {
+            IconButton(onClick = onBack) {
                 Icon(Icons.Default.ArrowBack, contentDescription = "Stop camera", tint = Color.Black)
             }
             Column(modifier = Modifier.weight(1f)) {
@@ -1221,6 +1343,8 @@ private fun LoginScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(page)
+            .statusBarsPadding()
+            .navigationBarsPadding()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 28.dp, vertical = 36.dp),
         contentAlignment = Alignment.Center,
