@@ -572,7 +572,9 @@ private fun NodeLoginScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .widthIn(max = 520.dp)
-                .align(Alignment.TopCenter),
+                .align(Alignment.TopCenter)
+                .verticalScroll(rememberScrollState())
+                .padding(bottom = 112.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Card(
