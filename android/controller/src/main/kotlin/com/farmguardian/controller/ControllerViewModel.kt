@@ -206,6 +206,21 @@ class ControllerViewModel : ViewModel() {
         )
     }
 
+    fun disableAutoPlayConfig() {
+        _state.update { it.copy(autoIntervalMinutes = 0) }
+        send(
+            GuardianMessage(
+                type = MessageType.AUTO_PLAY_CONFIG,
+                targetNodeId = selectedNodeIdOrLog() ?: return,
+                sound = state.value.defaultSoundId,
+                volume = state.value.volume,
+                loops = state.value.loops,
+                intervalSeconds = 0,
+            ),
+            "Auto play disabled",
+        )
+    }
+
     fun mute() = setVolume(0)
 
     fun volumeUp() = setVolume(state.value.volume + 5)

@@ -120,6 +120,7 @@ import com.farmguardian.shared.CameraLensFacing
 import com.farmguardian.shared.CameraDevicePayload
 import com.farmguardian.shared.DefaultSoundOptions
 import com.farmguardian.shared.NodeSummary
+import com.farmguardian.shared.SoundOption
 
 class MainActivity : ComponentActivity() {
     private val permissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) {}
@@ -225,133 +226,143 @@ private fun ControllerScreen(viewModel: ControllerViewModel = viewModel()) {
                     .padding(horizontal = 14.dp, vertical = 18.dp),
                 verticalArrangement = Arrangement.spacedBy(20.dp),
             ) {
-                SectionHeader("Connected Nodes", "$onlineCount Node${if (onlineCount == 1) "" else "s"} Active", primary, muted)
+                when (selectedNav) {
+                    "Nodes" -> {
+                        SectionHeader("Connected Nodes", "$onlineCount Node${if (onlineCount == 1) "" else "s"} Active", primary, muted)
 
-                if (state.nodes.isEmpty()) {
-                    DashboardCard(outline = outline) {
-                        Text("No nodes connected", color = muted, fontWeight = FontWeight.SemiBold)
-                        Text("Login with the same account on a Node phone to pair it here.", color = muted, fontSize = 13.sp)
-                    }
-                } else {
-                    selectedNode?.let { node ->
-                        NodeStatusCard(
+                        if (state.nodes.isEmpty()) {
+                            DashboardCard(outline = outline) {
+                                Text("No nodes connected", color = muted, fontWeight = FontWeight.SemiBold)
+                                Text("Login with the same account on a Node phone to pair it here.", color = muted, fontSize = 13.sp)
+                            }
+                        } else {
+                            selectedNode?.let { node ->
+                                NodeStatusCard(
+                                    state = state,
+                                    nodeName = node.friendlyName,
+                                    nodeId = node.nodeId,
+                                    online = node.online,
+                                    progress = playbackProgress,
+                                    primary = primary,
+                                    gold = gold,
+                                    outline = outline,
+                                    muted = muted,
+                                )
+                            }
+                            NodeSelector(
+                                nodes = state.nodes,
+                                selectedNodeId = state.selectedNodeId,
+                                primary = primary,
+                                outline = outline,
+                                onSelect = viewModel::selectNode,
+                                onDisconnect = viewModel::disconnectNode,
+                            )
+                        }
+
+                        if (state.connecting) {
+                            LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), color = gold)
+                        }
+
+                        if (state.nodes.isNotEmpty()) {
+                            OpenCameraCard(
+                                selectedNodeName = selectedNode?.friendlyName ?: "Main Farm",
+                                selectedNodeId = state.selectedNodeId ?: "Node-01",
+                                status = state.nodeStatusLabel,
+                                primary = primary,
+                                outline = outline,
+                                onOpen = {
+                                    showCameraScreen = true
+                                    viewModel.applyCameraConfig(true)
+                                },
+                            )
+                        }
+
+                        QuickCommandsSection(
                             state = state,
-                            nodeName = node.friendlyName,
-                            nodeId = node.nodeId,
-                            online = node.online,
-                            progress = playbackProgress,
                             primary = primary,
                             gold = gold,
-                            outline = outline,
-                            muted = muted,
+                            onPlay = viewModel::play,
                         )
+
+                        PlaybackDeck(
+                            volume = state.volume,
+                            loops = state.loops,
+                            playbackLabel = state.playbackLabel,
+                            primaryPanel = primaryPanel,
+                            gold = gold,
+                            onVolume = viewModel::setVolume,
+                            onVolumeDown = viewModel::volumeDown,
+                            onVolumeUp = viewModel::volumeUp,
+                            onStop = viewModel::stop,
+                            onPause = viewModel::pause,
+                            onLoopsDown = viewModel::loopsDown,
+                            onLoopsUp = viewModel::loopsUp,
+                        )
+
+                        TimedAutoplayCard(
+                            state = state,
+                            selectedDefaultSound = selectedDefaultSound,
+                            defaultSoundMenuOpen = defaultSoundMenuOpen,
+                            onDefaultSoundMenu = { defaultSoundMenuOpen = it },
+                            primary = primary,
+                            muted = muted,
+                            outline = outline,
+                            onDefaultSound = viewModel::setDefaultSound,
+                            onIntervalDown = viewModel::autoIntervalDown,
+                            onIntervalUp = viewModel::autoIntervalUp,
+                            onApply = viewModel::applyAutoPlayConfig,
+                        )
+
+                        ActivityLog(activity = state.activity.takeLast(6), primary = primary, gold = gold, outline = outline, muted = muted)
                     }
-                    NodeSelector(
-                        nodes = state.nodes,
-                        selectedNodeId = state.selectedNodeId,
+                    "Alerts" -> AlertsPage(
+                        state = state,
                         primary = primary,
+                        gold = gold,
                         outline = outline,
-                        onSelect = viewModel::selectNode,
-                        onDisconnect = viewModel::disconnectNode,
-                    )
-                }
-
-                if (state.connecting) {
-                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), color = gold)
-                }
-
-                if (state.nodes.isNotEmpty()) {
-                    OpenCameraCard(
-                        selectedNodeName = selectedNode?.friendlyName ?: "Main Farm",
-                        selectedNodeId = state.selectedNodeId ?: "Node-01",
-                        status = state.nodeStatusLabel,
-                        primary = primary,
-                        outline = outline,
-                        onOpen = {
+                        muted = muted,
+                        onOpenCamera = {
                             showCameraScreen = true
                             viewModel.applyCameraConfig(true)
                         },
+                        onPlayBuzzer = { viewModel.play("loud_buzzer") },
+                    )
+                    "Schedules" -> SchedulesPage(
+                        state = state,
+                        selectedDefaultSound = selectedDefaultSound,
+                        defaultSoundMenuOpen = defaultSoundMenuOpen,
+                        onDefaultSoundMenu = { defaultSoundMenuOpen = it },
+                        primary = primary,
+                        gold = gold,
+                        outline = outline,
+                        muted = muted,
+                        onDefaultSound = viewModel::setDefaultSound,
+                        onIntervalDown = viewModel::autoIntervalDown,
+                        onIntervalUp = viewModel::autoIntervalUp,
+                        onApply = viewModel::applyAutoPlayConfig,
+                        onDisable = {
+                            viewModel.disableAutoPlayConfig()
+                        },
+                    )
+                    "Settings" -> SettingsPage(
+                        state = state,
+                        primary = primary,
+                        gold = gold,
+                        outline = outline,
+                        muted = muted,
+                        onVolume = viewModel::setVolume,
+                        onVolumeDown = viewModel::volumeDown,
+                        onVolumeUp = viewModel::volumeUp,
+                        onLoopsDown = viewModel::loopsDown,
+                        onLoopsUp = viewModel::loopsUp,
+                        onFpsDown = { viewModel.setCameraFps(state.cameraFps - 1) },
+                        onFpsUp = { viewModel.setCameraFps(state.cameraFps + 1) },
+                        onQualityDown = { viewModel.setCameraQuality(state.cameraQuality - 10) },
+                        onQualityUp = { viewModel.setCameraQuality(state.cameraQuality + 10) },
+                        onResolution = viewModel::setCameraResolution,
+                        onLogout = viewModel::logout,
                     )
                 }
-
-                SectionTitle(icon = Icons.Default.VolumeUp, title = "Quick Commands", color = primary)
-                DefaultSoundOptions.chunked(2).forEach { row ->
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                        row.forEach { sound ->
-                            SoundCommandButton(
-                                label = sound.label,
-                                icon = soundIcon(sound.id),
-                                active = sound.id == state.currentSound,
-                                primary = primary,
-                                gold = gold,
-                                onClick = { viewModel.play(sound.id) },
-                                modifier = Modifier.weight(1f),
-                            )
-                        }
-                    }
-                }
-
-                PlaybackDeck(
-                    volume = state.volume,
-                    loops = state.loops,
-                    playbackLabel = state.playbackLabel,
-                    primaryPanel = primaryPanel,
-                    gold = gold,
-                    onVolume = viewModel::setVolume,
-                    onVolumeDown = viewModel::volumeDown,
-                    onVolumeUp = viewModel::volumeUp,
-                    onStop = viewModel::stop,
-                    onPause = viewModel::pause,
-                    onLoopsDown = viewModel::loopsDown,
-                    onLoopsUp = viewModel::loopsUp,
-                )
-
-                DashboardCard(outline = outline) {
-                    SectionTitle(icon = Icons.Default.Schedule, title = "Timed Autoplay", color = primary)
-                    Text("Default Sound", color = muted, fontSize = 12.sp)
-                    Box {
-                        OutlinedButton(
-                            onClick = { defaultSoundMenuOpen = true },
-                            shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Text(selectedDefaultSound.label, modifier = Modifier.weight(1f), textAlign = TextAlign.Start)
-                        }
-                        DropdownMenu(
-                            expanded = defaultSoundMenuOpen,
-                            onDismissRequest = { defaultSoundMenuOpen = false },
-                        ) {
-                            DefaultSoundOptions.forEach { sound ->
-                                DropdownMenuItem(
-                                    text = { Text(sound.label) },
-                                    onClick = {
-                                        viewModel.setDefaultSound(sound.id)
-                                        defaultSoundMenuOpen = false
-                                    },
-                                )
-                            }
-                        }
-                    }
-                    Text("Interval (min)", color = muted, fontSize = 12.sp)
-                    Stepper(
-                        value = state.autoIntervalMinutes.toString(),
-                        onMinus = viewModel::autoIntervalDown,
-                        onPlus = viewModel::autoIntervalUp,
-                    )
-                    Button(
-                        onClick = viewModel::applyAutoPlayConfig,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(48.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = primary, contentColor = Color.White),
-                        shape = RoundedCornerShape(8.dp),
-                    ) {
-                        Icon(Icons.Default.Timer, contentDescription = null)
-                        Text("Apply Timer", modifier = Modifier.padding(start = 8.dp), fontWeight = FontWeight.Bold)
-                    }
-                }
-
-                ActivityLog(activity = state.activity.takeLast(6), primary = primary, gold = gold, outline = outline, muted = muted)
 
                 Spacer(modifier = Modifier.height(128.dp))
             }
@@ -673,6 +684,347 @@ private fun NodeSelector(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun QuickCommandsSection(
+    state: ControllerState,
+    primary: Color,
+    gold: Color,
+    onPlay: (String) -> Unit,
+) {
+    SectionTitle(icon = Icons.Default.VolumeUp, title = "Quick Commands", color = primary)
+    DefaultSoundOptions.chunked(2).forEach { row ->
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+            row.forEach { sound ->
+                SoundCommandButton(
+                    label = sound.label,
+                    icon = soundIcon(sound.id),
+                    active = sound.id == state.currentSound,
+                    primary = primary,
+                    gold = gold,
+                    onClick = { onPlay(sound.id) },
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun TimedAutoplayCard(
+    state: ControllerState,
+    selectedDefaultSound: SoundOption,
+    defaultSoundMenuOpen: Boolean,
+    onDefaultSoundMenu: (Boolean) -> Unit,
+    primary: Color,
+    muted: Color,
+    outline: Color,
+    onDefaultSound: (String) -> Unit,
+    onIntervalDown: () -> Unit,
+    onIntervalUp: () -> Unit,
+    onApply: () -> Unit,
+) {
+    DashboardCard(outline = outline) {
+        SectionTitle(icon = Icons.Default.Schedule, title = "Timed Autoplay", color = primary)
+        Text("Default Sound", color = muted, fontSize = 12.sp)
+        Box {
+            OutlinedButton(
+                onClick = { onDefaultSoundMenu(true) },
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(selectedDefaultSound.label, modifier = Modifier.weight(1f), textAlign = TextAlign.Start)
+            }
+            DropdownMenu(
+                expanded = defaultSoundMenuOpen,
+                onDismissRequest = { onDefaultSoundMenu(false) },
+            ) {
+                DefaultSoundOptions.forEach { sound ->
+                    DropdownMenuItem(
+                        text = { Text(sound.label) },
+                        onClick = {
+                            onDefaultSound(sound.id)
+                            onDefaultSoundMenu(false)
+                        },
+                    )
+                }
+            }
+        }
+        Text("Interval (min)", color = muted, fontSize = 12.sp)
+        Stepper(
+            value = state.autoIntervalMinutes.toString(),
+            onMinus = onIntervalDown,
+            onPlus = onIntervalUp,
+        )
+        Button(
+            onClick = onApply,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(48.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = primary, contentColor = Color.White),
+            shape = RoundedCornerShape(8.dp),
+        ) {
+            Icon(Icons.Default.Timer, contentDescription = null)
+            Text("Apply Timer", modifier = Modifier.padding(start = 8.dp), fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+@Composable
+private fun AlertsPage(
+    state: ControllerState,
+    primary: Color,
+    gold: Color,
+    outline: Color,
+    muted: Color,
+    onOpenCamera: () -> Unit,
+    onPlayBuzzer: () -> Unit,
+) {
+    val offlineNodes = state.nodes.filterNot { it.online }
+    val lowBatteryNodes = state.nodes.filter { (it.status?.batteryPercent ?: 100) <= 25 }
+    val alerts = buildList {
+        if (state.backendStatus != "Connected") add("Backend reconnecting")
+        offlineNodes.forEach { add("${it.friendlyName} offline") }
+        lowBatteryNodes.forEach { add("${it.friendlyName} low battery") }
+        if (state.nodes.isEmpty()) add("No node paired")
+        state.activity.takeLast(8).filter {
+            it.contains("failed", ignoreCase = true) || it.contains("offline", ignoreCase = true) || it.contains("disconnect", ignoreCase = true)
+        }.forEach { add(it.drop(10).trim()) }
+    }.distinct().take(8)
+
+    SectionHeader("Alerts", "${alerts.size} Active", primary, muted)
+    DashboardCard(outline = outline) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .background(if (alerts.isEmpty()) Color(0xFFC1ECD4) else Color(0xFFFFDAD6), CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = if (alerts.isEmpty()) Icons.Default.Info else Icons.Default.Warning,
+                    contentDescription = null,
+                    tint = if (alerts.isEmpty()) primary else Color(0xFFBA1A1A),
+                )
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(if (alerts.isEmpty()) "All systems normal" else "Attention needed", color = primary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Text("Backend: ${state.backendStatus} - Selected node: ${state.nodeStatusLabel}", color = muted, fontSize = 12.sp)
+            }
+        }
+    }
+
+    DashboardCard(outline = outline) {
+        SectionTitle(icon = Icons.Default.Notifications, title = "Alert Feed", color = primary)
+        if (alerts.isEmpty()) {
+            Text("No alerts right now", color = muted, fontSize = 13.sp)
+        } else {
+            alerts.forEach { alert ->
+                AlertRow(alert = alert, primary = primary, muted = muted)
+            }
+        }
+    }
+
+    DashboardCard(outline = outline) {
+        SectionTitle(icon = Icons.Default.Emergency, title = "Response Actions", color = primary)
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+            Button(
+                onClick = onOpenCamera,
+                modifier = Modifier.weight(1f).height(48.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = primary, contentColor = Color.White),
+                shape = RoundedCornerShape(8.dp),
+            ) {
+                Icon(Icons.Default.Videocam, contentDescription = null, modifier = Modifier.size(18.dp))
+                Text("Camera", modifier = Modifier.padding(start = 8.dp))
+            }
+            Button(
+                onClick = onPlayBuzzer,
+                modifier = Modifier.weight(1f).height(48.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = gold, contentColor = primary),
+                shape = RoundedCornerShape(8.dp),
+            ) {
+                Icon(Icons.Default.NotificationImportant, contentDescription = null, modifier = Modifier.size(18.dp))
+                Text("Buzzer", modifier = Modifier.padding(start = 8.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun AlertRow(alert: String, primary: Color, muted: Color) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(34.dp)
+                .background(Color(0xFFFFDAD6), CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(Icons.Default.Warning, contentDescription = null, tint = Color(0xFFBA1A1A), modifier = Modifier.size(18.dp))
+        }
+        Column(modifier = Modifier.weight(1f)) {
+            Text(alert, color = Color.Black, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            Text("Review node status before taking action", color = muted, fontSize = 11.sp)
+        }
+        Icon(Icons.Default.ChevronRight, contentDescription = null, tint = primary, modifier = Modifier.size(18.dp))
+    }
+}
+
+@Composable
+private fun SchedulesPage(
+    state: ControllerState,
+    selectedDefaultSound: SoundOption,
+    defaultSoundMenuOpen: Boolean,
+    onDefaultSoundMenu: (Boolean) -> Unit,
+    primary: Color,
+    gold: Color,
+    outline: Color,
+    muted: Color,
+    onDefaultSound: (String) -> Unit,
+    onIntervalDown: () -> Unit,
+    onIntervalUp: () -> Unit,
+    onApply: () -> Unit,
+    onDisable: () -> Unit,
+) {
+    SectionHeader("Schedules", if (state.autoIntervalMinutes > 0) "Timer Active" else "No Active Timer", primary, muted)
+    DashboardCard(outline = outline) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            Box(
+                modifier = Modifier
+                    .size(54.dp)
+                    .background(gold.copy(alpha = 0.22f), CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(Icons.Default.Timer, contentDescription = null, tint = Color(0xFF7D5800), modifier = Modifier.size(28.dp))
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = if (state.autoIntervalMinutes > 0) "Every ${state.autoIntervalMinutes} minutes" else "Timed autoplay disabled",
+                    color = primary,
+                    fontSize = 19.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text("Default: ${selectedDefaultSound.label} - Repeats: ${state.loops}", color = muted, fontSize = 12.sp)
+            }
+        }
+    }
+    TimedAutoplayCard(
+        state = state,
+        selectedDefaultSound = selectedDefaultSound,
+        defaultSoundMenuOpen = defaultSoundMenuOpen,
+        onDefaultSoundMenu = onDefaultSoundMenu,
+        primary = primary,
+        muted = muted,
+        outline = outline,
+        onDefaultSound = onDefaultSound,
+        onIntervalDown = onIntervalDown,
+        onIntervalUp = onIntervalUp,
+        onApply = onApply,
+    )
+    OutlinedButton(
+        onClick = onDisable,
+        modifier = Modifier.fillMaxWidth().height(48.dp),
+        shape = RoundedCornerShape(8.dp),
+        border = BorderStroke(1.dp, Color(0xFFBA1A1A)),
+    ) {
+        Icon(Icons.Default.Stop, contentDescription = null, tint = Color(0xFFBA1A1A))
+        Text("Disable Timer", modifier = Modifier.padding(start = 8.dp), color = Color(0xFFBA1A1A), fontWeight = FontWeight.Bold)
+    }
+    ActivityLog(activity = state.activity.takeLast(6), primary = primary, gold = gold, outline = outline, muted = muted)
+}
+
+@Composable
+private fun SettingsPage(
+    state: ControllerState,
+    primary: Color,
+    gold: Color,
+    outline: Color,
+    muted: Color,
+    onVolume: (Int) -> Unit,
+    onVolumeDown: () -> Unit,
+    onVolumeUp: () -> Unit,
+    onLoopsDown: () -> Unit,
+    onLoopsUp: () -> Unit,
+    onFpsDown: () -> Unit,
+    onFpsUp: () -> Unit,
+    onQualityDown: () -> Unit,
+    onQualityUp: () -> Unit,
+    onResolution: (Int, Int) -> Unit,
+    onLogout: () -> Unit,
+) {
+    SectionHeader("Settings", state.username, primary, muted)
+    DashboardCard(outline = outline) {
+        SectionTitle(icon = Icons.Default.VolumeUp, title = "Sound Output", color = primary)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Volume", color = muted, modifier = Modifier.weight(1f))
+            Text("${state.volume}%", color = primary, fontWeight = FontWeight.Bold)
+        }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            SmallOutlineButton(Icons.Default.Remove, onVolumeDown)
+            Slider(
+                value = state.volume.toFloat(),
+                onValueChange = { onVolume(it.toInt()) },
+                valueRange = 0f..100f,
+                modifier = Modifier.weight(1f),
+            )
+            SmallOutlineButton(Icons.Default.Add, onVolumeUp)
+        }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Repeats", color = muted, modifier = Modifier.weight(1f))
+            SmallOutlineButton(Icons.Default.Remove, onLoopsDown)
+            Text("${state.loops}", color = primary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            SmallOutlineButton(Icons.Default.Add, onLoopsUp)
+        }
+    }
+
+    DashboardCard(outline = outline) {
+        SectionTitle(icon = Icons.Default.Videocam, title = "Stream Defaults", color = primary)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("FPS ${state.cameraFps}", color = muted, modifier = Modifier.weight(1f))
+            SmallOutlineButton(Icons.Default.Remove, onFpsDown)
+            SmallOutlineButton(Icons.Default.Add, onFpsUp)
+        }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Quality ${state.cameraQuality}", color = muted, modifier = Modifier.weight(1f))
+            SmallOutlineButton(Icons.Default.Remove, onQualityDown)
+            SmallOutlineButton(Icons.Default.Add, onQualityUp)
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            ControlChip("Low", state.cameraWidth == 320, primary) { onResolution(320, 240) }
+            ControlChip("Med", state.cameraWidth == 480, primary) { onResolution(480, 360) }
+            ControlChip("High", state.cameraWidth == 640, primary) { onResolution(640, 480) }
+        }
+        Text("Camera source is selected from the live camera screen.", color = muted, fontSize = 12.sp)
+    }
+
+    DashboardCard(outline = outline) {
+        SectionTitle(icon = Icons.Default.Info, title = "System", color = primary)
+        SettingsRow("Backend", state.backendStatus, muted)
+        SettingsRow("Selected node", state.selectedNodeId ?: "None", muted)
+        SettingsRow("Node speaker", state.speakerName ?: "Unknown", muted)
+        SettingsRow("Last seen", state.lastSeenLabel, muted)
+        Button(
+            onClick = onLogout,
+            modifier = Modifier.fillMaxWidth().height(48.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = primary, contentColor = Color.White),
+            shape = RoundedCornerShape(8.dp),
+        ) {
+            Icon(Icons.Default.Logout, contentDescription = null)
+            Text("Logout Controller", modifier = Modifier.padding(start = 8.dp), fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+@Composable
+private fun SettingsRow(label: String, value: String, muted: Color) {
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, color = muted, fontSize = 13.sp, modifier = Modifier.weight(1f))
+        Text(value, color = Color.Black, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.End)
     }
 }
 

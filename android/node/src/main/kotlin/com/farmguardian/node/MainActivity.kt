@@ -218,164 +218,31 @@ private fun NodeDashboardScreen(
                     .padding(horizontal = 18.dp, vertical = 36.dp),
                 verticalArrangement = Arrangement.spacedBy(28.dp),
             ) {
-                Row(horizontalArrangement = Arrangement.spacedBy(18.dp), modifier = Modifier.fillMaxWidth()) {
-                    StatusTile(
-                        icon = Icons.Default.Hub,
-                        badge = if (connected) "Stable" else "Retrying",
-                        label = "Connection",
-                        value = snapshot.connection,
-                        badgeColor = if (connected) Color(0xFFC1ECD4) else Color(0xFFFFDEA9),
-                        iconColor = primary,
+                when (selectedNav) {
+                    "Nodes" -> NodeOverviewPage(
+                        snapshot = snapshot,
+                        connected = connected,
+                        playing = playing,
+                        primary = primary,
+                        gold = gold,
                         outline = outline,
-                        modifier = Modifier.weight(1f),
+                        muted = muted,
+                        onStartService = onStartService,
+                        onClearLogs = onClearLogs,
+                        onLogout = onLogout,
                     )
-                    StatusTile(
-                        icon = Icons.Default.Terminal,
-                        badge = "Active",
-                        label = "Service",
-                        value = "Running",
-                        badgeColor = Color(0xFFC1ECD4),
-                        iconColor = primary,
+                    "Alerts" -> NodeAlertsPage(snapshot = snapshot, primary = primary, gold = gold, outline = outline, muted = muted)
+                    "Schedules" -> NodeSchedulesPage(snapshot = snapshot, primary = primary, gold = gold, outline = outline, muted = muted)
+                    "Settings" -> NodeSettingsPage(
+                        nodeId = nodeId,
+                        snapshot = snapshot,
+                        primary = primary,
                         outline = outline,
-                        modifier = Modifier.weight(1f),
+                        muted = muted,
+                        onStartService = onStartService,
+                        onClearLogs = onClearLogs,
+                        onLogout = onLogout,
                     )
-                }
-
-                Row(horizontalArrangement = Arrangement.spacedBy(18.dp), modifier = Modifier.fillMaxWidth()) {
-                    StatusTile(
-                        icon = Icons.Default.BatteryChargingFull,
-                        badge = snapshot.charging,
-                        label = "Battery",
-                        value = snapshot.battery,
-                        badgeColor = if (snapshot.charging == "Charging") Color(0xFFFFDEA9) else Color(0xFFE1E3E4),
-                        iconColor = Color(0xFF7D5800),
-                        outline = outline,
-                        modifier = Modifier.weight(1f),
-                    )
-                    StatusTile(
-                        icon = Icons.Default.Bluetooth,
-                        badge = if (snapshot.bluetooth == "Connected") "Paired" else "Phone",
-                        label = "Audio Source",
-                        value = snapshot.speaker,
-                        badgeColor = if (snapshot.bluetooth == "Connected") Color(0xFFE1E3E4) else Color(0xFFC1ECD4),
-                        iconColor = primary,
-                        outline = outline,
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-
-                DashboardCard(outline = outline) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Playback", color = primary, fontSize = 24.sp, fontWeight = FontWeight.Bold)
-                        Spacer(modifier = Modifier.weight(1f))
-                        Icon(
-                            imageVector = if (playing) Icons.Default.PlayArrow else Icons.Default.PowerSettingsNew,
-                            contentDescription = null,
-                            tint = muted,
-                            modifier = Modifier.size(18.dp),
-                        )
-                        Text(
-                            text = if (playing) "Playing" else "Idle / ${snapshot.playback}",
-                            color = Color.Black,
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier.padding(start = 6.dp),
-                        )
-                    }
-                    Row(
-                        modifier = Modifier.padding(top = 22.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(26.dp),
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(90.dp)
-                                .background(Color(0xFFEDEEEF), RoundedCornerShape(8.dp)),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(Icons.Default.MusicNote, contentDescription = null, tint = Color(0xFF717973), modifier = Modifier.size(42.dp))
-                        }
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = if (playing) "Deterrent stream active" else "No active deterrent stream",
-                                color = muted,
-                                fontSize = 15.sp,
-                            )
-                            Text(
-                                text = if (playing) snapshot.currentSound else "System Standby",
-                                color = primary,
-                                fontSize = 23.sp,
-                                fontWeight = FontWeight.Bold,
-                            )
-                            Box(
-                                modifier = Modifier
-                                    .padding(top = 16.dp)
-                                    .fillMaxWidth()
-                                    .height(4.dp)
-                                    .background(Color(0xFFE1E3E4), RoundedCornerShape(999.dp)),
-                            ) {
-                                Spacer(
-                                    modifier = Modifier
-                                        .fillMaxWidth(if (playing) 0.62f else 0f)
-                                        .height(4.dp)
-                                        .background(primary, RoundedCornerShape(999.dp)),
-                                )
-                            }
-                        }
-                    }
-                }
-
-                DashboardCard(outline = outline) {
-                    Text("NODE CONTROLS", color = muted, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                    Button(
-                        onClick = onStartService,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(56.dp),
-                        shape = RoundedCornerShape(8.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE1E3E4), contentColor = muted),
-                    ) {
-                        Icon(Icons.Default.PlayArrow, contentDescription = null)
-                        Text("Start Service", modifier = Modifier.padding(start = 10.dp), fontSize = 18.sp)
-                    }
-                    Button(
-                        onClick = onClearLogs,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(56.dp),
-                        shape = RoundedCornerShape(8.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = primary),
-                        border = BorderStroke(2.dp, Color(0xFF717973)),
-                    ) {
-                        Icon(Icons.Default.DeleteSweep, contentDescription = null)
-                        Text("Clear Logs", modifier = Modifier.padding(start = 10.dp), fontSize = 18.sp)
-                    }
-                    Button(
-                        onClick = onLogout,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(56.dp),
-                        shape = RoundedCornerShape(8.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color(0xFFBA1A1A)),
-                        border = BorderStroke(2.dp, Color(0xFFBA1A1A)),
-                    ) {
-                        Icon(Icons.Default.Logout, contentDescription = null)
-                        Text("Logout Node", modifier = Modifier.padding(start = 10.dp), fontSize = 18.sp)
-                    }
-                }
-
-                DashboardCard(outline = outline) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Activity Log", color = primary, fontSize = 24.sp, fontWeight = FontWeight.Bold)
-                        Spacer(modifier = Modifier.weight(1f))
-                        Text("Last update: ${snapshot.lastSeen}", color = muted, fontSize = 12.sp)
-                    }
-                    val logs = snapshot.logs.takeLast(6).ifEmpty {
-                        listOf("${snapshot.lastSeen.takeIf { it != "Never" } ?: "--:--:--"}  Service  Waiting for first event")
-                    }
-                    logs.reversed().forEach { line ->
-                        LogRow(line = line, primary = primary, gold = gold, muted = muted)
-                    }
                 }
 
                 Spacer(modifier = Modifier.height(128.dp))
@@ -389,6 +256,294 @@ private fun NodeDashboardScreen(
             gold = gold,
             onSelect = { selectedNav = it },
         )
+    }
+}
+
+@Composable
+private fun NodeOverviewPage(
+    snapshot: NodeUiSnapshot,
+    connected: Boolean,
+    playing: Boolean,
+    primary: Color,
+    gold: Color,
+    outline: Color,
+    muted: Color,
+    onStartService: () -> Unit,
+    onClearLogs: () -> Unit,
+    onLogout: () -> Unit,
+) {
+    Row(horizontalArrangement = Arrangement.spacedBy(18.dp), modifier = Modifier.fillMaxWidth()) {
+        StatusTile(
+            icon = Icons.Default.Hub,
+            badge = if (connected) "Stable" else "Retrying",
+            label = "Connection",
+            value = snapshot.connection,
+            badgeColor = if (connected) Color(0xFFC1ECD4) else Color(0xFFFFDEA9),
+            iconColor = primary,
+            outline = outline,
+            modifier = Modifier.weight(1f),
+        )
+        StatusTile(
+            icon = Icons.Default.Terminal,
+            badge = "Active",
+            label = "Service",
+            value = "Running",
+            badgeColor = Color(0xFFC1ECD4),
+            iconColor = primary,
+            outline = outline,
+            modifier = Modifier.weight(1f),
+        )
+    }
+
+    Row(horizontalArrangement = Arrangement.spacedBy(18.dp), modifier = Modifier.fillMaxWidth()) {
+        StatusTile(
+            icon = Icons.Default.BatteryChargingFull,
+            badge = snapshot.charging,
+            label = "Battery",
+            value = snapshot.battery,
+            badgeColor = if (snapshot.charging == "Charging") Color(0xFFFFDEA9) else Color(0xFFE1E3E4),
+            iconColor = Color(0xFF7D5800),
+            outline = outline,
+            modifier = Modifier.weight(1f),
+        )
+        StatusTile(
+            icon = Icons.Default.Bluetooth,
+            badge = if (snapshot.bluetooth == "Connected") "Paired" else "Phone",
+            label = "Audio Source",
+            value = snapshot.speaker,
+            badgeColor = if (snapshot.bluetooth == "Connected") Color(0xFFE1E3E4) else Color(0xFFC1ECD4),
+            iconColor = primary,
+            outline = outline,
+            modifier = Modifier.weight(1f),
+        )
+    }
+
+    NodePlaybackCard(snapshot = snapshot, playing = playing, primary = primary, muted = muted, outline = outline)
+    NodeControlsCard(outline = outline, primary = primary, muted = muted, onStartService = onStartService, onClearLogs = onClearLogs, onLogout = onLogout)
+    NodeActivityCard(snapshot = snapshot, primary = primary, gold = gold, muted = muted, outline = outline)
+}
+
+@Composable
+private fun NodePlaybackCard(snapshot: NodeUiSnapshot, playing: Boolean, primary: Color, muted: Color, outline: Color) {
+    DashboardCard(outline = outline) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Playback", color = primary, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+            Spacer(modifier = Modifier.weight(1f))
+            Icon(
+                imageVector = if (playing) Icons.Default.PlayArrow else Icons.Default.PowerSettingsNew,
+                contentDescription = null,
+                tint = muted,
+                modifier = Modifier.size(18.dp),
+            )
+            Text(
+                text = if (playing) "Playing" else "Idle / ${snapshot.playback}",
+                color = Color.Black,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(start = 6.dp),
+            )
+        }
+        Row(
+            modifier = Modifier.padding(top = 22.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(26.dp),
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(90.dp)
+                    .background(Color(0xFFEDEEEF), RoundedCornerShape(8.dp)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(Icons.Default.MusicNote, contentDescription = null, tint = Color(0xFF717973), modifier = Modifier.size(42.dp))
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = if (playing) "Deterrent stream active" else "No active deterrent stream",
+                    color = muted,
+                    fontSize = 15.sp,
+                )
+                Text(
+                    text = if (playing) snapshot.currentSound else "System Standby",
+                    color = primary,
+                    fontSize = 23.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+                Box(
+                    modifier = Modifier
+                        .padding(top = 16.dp)
+                        .fillMaxWidth()
+                        .height(4.dp)
+                        .background(Color(0xFFE1E3E4), RoundedCornerShape(999.dp)),
+                ) {
+                    Spacer(
+                        modifier = Modifier
+                            .fillMaxWidth(if (playing) 0.62f else 0f)
+                            .height(4.dp)
+                            .background(primary, RoundedCornerShape(999.dp)),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun NodeControlsCard(
+    outline: Color,
+    primary: Color,
+    muted: Color,
+    onStartService: () -> Unit,
+    onClearLogs: () -> Unit,
+    onLogout: () -> Unit,
+) {
+    DashboardCard(outline = outline) {
+        Text("NODE CONTROLS", color = muted, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+        Button(
+            onClick = onStartService,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp),
+            shape = RoundedCornerShape(8.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE1E3E4), contentColor = muted),
+        ) {
+            Icon(Icons.Default.PlayArrow, contentDescription = null)
+            Text("Start Service", modifier = Modifier.padding(start = 10.dp), fontSize = 18.sp)
+        }
+        Button(
+            onClick = onClearLogs,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp),
+            shape = RoundedCornerShape(8.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = primary),
+            border = BorderStroke(2.dp, Color(0xFF717973)),
+        ) {
+            Icon(Icons.Default.DeleteSweep, contentDescription = null)
+            Text("Clear Logs", modifier = Modifier.padding(start = 10.dp), fontSize = 18.sp)
+        }
+        Button(
+            onClick = onLogout,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp),
+            shape = RoundedCornerShape(8.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color(0xFFBA1A1A)),
+            border = BorderStroke(2.dp, Color(0xFFBA1A1A)),
+        ) {
+            Icon(Icons.Default.Logout, contentDescription = null)
+            Text("Logout Node", modifier = Modifier.padding(start = 10.dp), fontSize = 18.sp)
+        }
+    }
+}
+
+@Composable
+private fun NodeActivityCard(snapshot: NodeUiSnapshot, primary: Color, gold: Color, muted: Color, outline: Color) {
+    DashboardCard(outline = outline) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Activity Log", color = primary, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+            Spacer(modifier = Modifier.weight(1f))
+            Text("Last update: ${snapshot.lastSeen}", color = muted, fontSize = 12.sp)
+        }
+        val logs = snapshot.logs.takeLast(6).ifEmpty {
+            listOf("${snapshot.lastSeen.takeIf { it != "Never" } ?: "--:--:--"}  Service  Waiting for first event")
+        }
+        logs.reversed().forEach { line ->
+            LogRow(line = line, primary = primary, gold = gold, muted = muted)
+        }
+    }
+}
+
+@Composable
+private fun NodeAlertsPage(snapshot: NodeUiSnapshot, primary: Color, gold: Color, outline: Color, muted: Color) {
+    val alertLogs = snapshot.logs.takeLast(12).filter {
+        it.contains("fail", ignoreCase = true) ||
+            it.contains("permission", ignoreCase = true) ||
+            it.contains("disconnect", ignoreCase = true) ||
+            it.contains("retry", ignoreCase = true)
+    }
+    DashboardCard(outline = outline) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            Box(
+                modifier = Modifier
+                    .size(52.dp)
+                    .background(if (alertLogs.isEmpty()) Color(0xFFC1ECD4) else Color(0xFFFFDEA9), CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(Icons.Default.Notifications, contentDescription = null, tint = primary, modifier = Modifier.size(28.dp))
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(if (alertLogs.isEmpty()) "No node alerts" else "${alertLogs.size} node alerts", color = primary, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                Text("Connection: ${snapshot.connection}", color = muted, fontSize = 14.sp)
+            }
+        }
+    }
+    DashboardCard(outline = outline) {
+        Text("ALERT HISTORY", color = muted, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+        val rows = alertLogs.ifEmpty {
+            listOf("${snapshot.lastSeen.takeIf { it != "Never" } ?: "--:--:--"}  Monitor  Everything normal")
+        }
+        rows.reversed().forEach { line -> LogRow(line = line, primary = primary, gold = gold, muted = muted) }
+    }
+}
+
+@Composable
+private fun NodeSchedulesPage(snapshot: NodeUiSnapshot, primary: Color, gold: Color, outline: Color, muted: Color) {
+    val autoLog = snapshot.logs.lastOrNull { it.contains("Auto play", ignoreCase = true) }
+    DashboardCard(outline = outline) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            Box(
+                modifier = Modifier
+                    .size(52.dp)
+                    .background(gold.copy(alpha = 0.22f), CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(Icons.Default.Timer, contentDescription = null, tint = Color(0xFF7D5800), modifier = Modifier.size(28.dp))
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Autoplay Schedule", color = primary, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                Text(autoLog?.drop(10)?.trim() ?: "Waiting for controller timer", color = muted, fontSize = 14.sp)
+            }
+        }
+    }
+    DashboardCard(outline = outline) {
+        Text("SCHEDULE EVENTS", color = muted, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+        snapshot.logs.filter { it.contains("auto", ignoreCase = true) || it.contains("timer", ignoreCase = true) }
+            .takeLast(6)
+            .ifEmpty { listOf("${snapshot.lastSeen.takeIf { it != "Never" } ?: "--:--:--"}  Schedule  No timer updates yet") }
+            .reversed()
+            .forEach { line -> LogRow(line = line, primary = primary, gold = gold, muted = muted) }
+    }
+}
+
+@Composable
+private fun NodeSettingsPage(
+    nodeId: String,
+    snapshot: NodeUiSnapshot,
+    primary: Color,
+    outline: Color,
+    muted: Color,
+    onStartService: () -> Unit,
+    onClearLogs: () -> Unit,
+    onLogout: () -> Unit,
+) {
+    DashboardCard(outline = outline) {
+        Text("NODE SETTINGS", color = primary, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+        NodeSettingsRow("Node ID", nodeId, muted)
+        NodeSettingsRow("Backend connection", snapshot.connection, muted)
+        NodeSettingsRow("Network", snapshot.network, muted)
+        NodeSettingsRow("Audio output", snapshot.speaker, muted)
+        NodeSettingsRow("Bluetooth", snapshot.bluetooth, muted)
+        NodeSettingsRow("Last command", snapshot.lastCommand, muted)
+        NodeSettingsRow("Last seen", snapshot.lastSeen, muted)
+    }
+    NodeControlsCard(outline = outline, primary = primary, muted = muted, onStartService = onStartService, onClearLogs = onClearLogs, onLogout = onLogout)
+}
+
+@Composable
+private fun NodeSettingsRow(label: String, value: String, muted: Color) {
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, color = muted, fontSize = 14.sp, modifier = Modifier.weight(1f))
+        Text(value, color = Color.Black, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.End)
     }
 }
 
